@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/clientDb';
@@ -31,6 +31,34 @@ export default function App() {
   // Read paired devices from IndexedDB
   const devices = useLiveQuery(() => db.devices.toArray()) || [];
   const activeDevice = devices[0]; // Select the first paired host for demonstration
+
+  // Auto-pair immediately if hosted directly on the agent port
+  useEffect(() => {
+    const autoPairLocal = async () => {
+      const port = window.location.port;
+      const hostname = window.location.hostname;
+      if (port === '23810') {
+        const count = await db.devices.count();
+        if (count === 0) {
+          const protocol = window.location.protocol;
+          await db.devices.add({
+            uuid: 'local-auto-paired-uuid',
+            name: 'Этот Компьютер',
+            ipAddress: `${protocol}//${hostname}:${port}`,
+            port: 23810,
+            macAddress: '00:00:00:00:00:00',
+            osName: 'Windows',
+            osVersion: 'Локально',
+            sharedSecret: 'LOCAL_SECRET',
+            isPaired: true,
+            lastConnected: new Date()
+          });
+          console.log('Автоматически сопряжено с локальным агентом!');
+        }
+      }
+    };
+    autoPairLocal();
+  }, [devices]);
 
   // WebSocket Connection
   const { isConnected, isAuthorized, sendEvent } = useWebSocket(activeDevice || null);
