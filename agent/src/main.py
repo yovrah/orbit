@@ -49,6 +49,23 @@ class WolRequest(BaseModel):
 class AppLaunchRequest(BaseModel):
     path: str
 
+def print_qr_code(url: str, hostname_url: str):
+    try:
+        import qrcode
+        qr = qrcode.QRCode(box_size=1, border=1)
+        qr.add_data(url)
+        qr.make(fit=True)
+        print("\n" + "=" * 50)
+        print("   SCAN THIS QR CODE WITH YOUR PHONE TO CONNECT:")
+        print("=" * 50)
+        qr.print_ascii(invert=True)
+        print("=" * 50)
+        print(f"IP URL:       {url}")
+        print(f"Hostname URL: {hostname_url}")
+        print("=" * 50 + "\n")
+    except Exception as e:
+        print(f"Failed to render QR Code: {e}")
+
 @app.on_event("startup")
 def startup_event():
     global zeroconf, info
@@ -62,11 +79,19 @@ def startup_event():
         local_ip = s.getsockname()[0]
         s.close()
 
+        # Build connection URLs
+        local_url = f"http://{local_ip}:23810"
+        hostname = socket.gethostname().lower()
+        hostname_url = f"http://{hostname}.local:23810"
+        
+        # Display QR code in console
+        print_qr_code(local_url, hostname_url)
+
         # Register mDNS service
         desc = {'os': 'Windows', 'version': '1.0.0', 'path': '/api/v1'}
         info = ServiceInfo(
             "_orbit-control._tcp.local.",
-            "My PC._orbit-control._tcp.local.",
+            f"{hostname}._orbit-control._tcp.local.",
             addresses=[socket.inet_aton(local_ip)],
             port=23810,
             properties=desc,
@@ -142,7 +167,6 @@ def pair_verify(req: PairVerifyRequest):
     models.delete_pending_pairing(req.pairing_session_token)
     print(f"Client '{pending['client_name']}' successfully paired!")
     
-    # Save a global trust state for local host auto-pairing
     models.add_paired_client(
         client_id="local-auto-paired-uuid",
         client_name="Local Web Interface",
@@ -203,7 +227,6 @@ async def websocket_control(websocket: WebSocket):
             timestamp = packet.get("timestamp")
             signature = packet.get("signature")
             
-            # Allow local auto-paired client to bypass standard signature validation if needed
             if c_id == "local-auto-paired-uuid":
                 authenticated = True
                 client_id = c_id
