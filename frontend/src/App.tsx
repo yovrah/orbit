@@ -617,6 +617,12 @@ export default function App() {
                   <p className="text-[9px] text-[#86868b] leading-normal mt-0.5">
                     *Для роутеров Keenetic используйте: <code>ip hotspot wake {activeDevice?.macAddress || 'MAC'}</code> или <code>wol wake {activeDevice?.macAddress || 'MAC'}</code>.
                   </p>
+                  <a
+                    href="shortcuts://"
+                    className="mt-2 text-center text-xs bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-xl transition-colors inline-block"
+                  >
+                    Открыть Быстрые команды
+                  </a>
                 </div>
                 
                 <div className="border-t border-black/10 dark:border-white/10 my-1"></div>
