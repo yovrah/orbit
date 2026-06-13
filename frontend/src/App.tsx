@@ -29,11 +29,16 @@ import {
   SkipBack,
   X,
   RefreshCw,
-  Volume2
+  Volume2,
+  Terminal,
+  Presentation,
+  Battery,
+  BatteryCharging,
+  Sun
 } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'remote' | 'screen' | 'keyboard' | 'files' | 'apps' | 'stats'>('remote');
+  const [activeTab, setActiveTab] = useState<'remote' | 'screen' | 'keyboard' | 'files' | 'apps' | 'stats' | 'gamepad' | 'terminal' | 'presenter'>('remote');
   const [activeNav, setActiveNav] = useState<'apps' | 'history' | 'settings'>('apps');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showPairing, setShowPairing] = useState(false);
@@ -63,9 +68,20 @@ export default function App() {
     os_name: string;
     cpu_name: string;
     hostname: string;
+    battery_percent: number | null;
+    battery_plugged: boolean | null;
   } | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [alertText, setAlertText] = useState('');
+
+  // Terminal state
+  const [terminalCommand, setTerminalCommand] = useState('');
+  const [terminalHistory, setTerminalHistory] = useState<Array<{ cmd: string; out: string; err: string; code: number }>>([]);
+  const [isRunningCommand, setIsRunningCommand] = useState(false);
+
+  // Presenter state
+  const [presenterTime, setPresenterTime] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
 
   // Read paired devices from IndexedDB
   const devices = useLiveQuery(() => db.devices.toArray()) || [];
@@ -208,6 +224,16 @@ export default function App() {
       return () => clearInterval(interval);
     }
   }, [activeTab, activeDevice, fetchSystemStats]);
+
+  useEffect(() => {
+    let interval: any;
+    if (isTimerRunning) {
+      interval = setInterval(() => {
+        setPresenterTime(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
 
   // Screen stream touch handlers
   const screenTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -438,6 +464,48 @@ export default function App() {
     }
   };
 
+  const handleSetBrightness = async (level: number) => {
+    if (!activeDevice) return;
+    try {
+      await fetch(`${activeDevice.ipAddress}/api/v1/system/brightness`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level })
+      });
+    } catch (err) {
+      console.error('Failed to set brightness:', err);
+    }
+  };
+
+  const handleRunTerminalCommand = async () => {
+    if (!activeDevice || !terminalCommand.trim()) return;
+    setIsRunningCommand(true);
+    const cmd = terminalCommand;
+    try {
+      const res = await fetch(`${activeDevice.ipAddress}/api/v1/system/terminal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTerminalHistory(prev => [
+          ...prev,
+          { cmd, out: data.stdout, err: data.stderr, code: data.return_code }
+        ]);
+        setTerminalCommand('');
+      }
+    } catch (err) {
+      console.error('Failed to run terminal command:', err);
+      setTerminalHistory(prev => [
+        ...prev,
+        { cmd, out: '', err: 'Ошибка подключения к агенту', code: -99 }
+      ]);
+    } finally {
+      setIsRunningCommand(false);
+    }
+  };
+
   const springTransition = {
     type: "spring",
     stiffness: 400,
@@ -456,7 +524,10 @@ export default function App() {
     { id: 'keyboard', label: 'Клавиши' },
     { id: 'files', label: 'Файлы' },
     { id: 'apps', label: 'Программы' },
-    { id: 'stats', label: 'Дашборд' }
+    { id: 'stats', label: 'Дашборд' },
+    { id: 'gamepad', label: 'Геймпад' },
+    { id: 'terminal', label: 'Консоль' },
+    { id: 'presenter', label: 'Презентация' }
   ];
 
   // Resolve Connection Status Badge
@@ -1003,17 +1074,54 @@ export default function App() {
                               <span className="text-[8px] text-[#86868b] mt-1.5 font-mono">{systemStats.ram_used_gb}/{systemStats.ram_total_gb} GB</span>
                             </div>
 
-                            {/* Disk */}
-                            <div className="bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3 rounded-2xl flex flex-col items-center text-center">
-                              <span className="text-[10px] font-bold text-[#86868b] uppercase">Disk C:</span>
-                              <div className="relative w-12 h-12 flex items-center justify-center mt-2">
-                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                                  <path className="text-black/10 dark:text-white/10" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                  <path className="text-purple-500 transition-all duration-500" strokeDasharray={`${systemStats.disk_percent}, 100`} strokeWidth="3.5" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                </svg>
-                                <span className="absolute text-[10px] font-bold text-[var(--text-primary)]">{Math.round(systemStats.disk_percent)}%</span>
+                            {/* Battery or Disk */}
+                            {systemStats.battery_percent !== null ? (
+                              <div className="bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3 rounded-2xl flex flex-col items-center text-center">
+                                <span className="text-[10px] font-bold text-[#86868b] uppercase flex items-center gap-1">
+                                  {systemStats.battery_plugged ? <BatteryCharging size={10} className="text-emerald-500 animate-pulse" /> : <Battery size={10} />}
+                                  АКБ
+                                </span>
+                                <div className="relative w-12 h-12 flex items-center justify-center mt-2">
+                                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                    <path className="text-black/10 dark:text-white/10" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    <path className="text-yellow-500 transition-all duration-500" strokeDasharray={`${systemStats.battery_percent}, 100`} strokeWidth="3.5" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                  </svg>
+                                  <span className="absolute text-[10px] font-bold text-[var(--text-primary)]">{systemStats.battery_percent}%</span>
+                                </div>
+                                <span className="text-[8px] text-[#86868b] mt-1.5 font-semibold">
+                                  {systemStats.battery_plugged ? 'Зарядка' : 'Разрядка'}
+                                </span>
                               </div>
-                              <span className="text-[8px] text-[#86868b] mt-1.5 font-mono">{systemStats.disk_used_gb}/{systemStats.disk_total_gb} GB</span>
+                            ) : (
+                              <div className="bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3 rounded-2xl flex flex-col items-center text-center">
+                                <span className="text-[10px] font-bold text-[#86868b] uppercase">Disk C:</span>
+                                <div className="relative w-12 h-12 flex items-center justify-center mt-2">
+                                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                    <path className="text-black/10 dark:text-white/10" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    <path className="text-purple-500 transition-all duration-500" strokeDasharray={`${systemStats.disk_percent}, 100`} strokeWidth="3.5" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                  </svg>
+                                  <span className="absolute text-[10px] font-bold text-[var(--text-primary)]">{Math.round(systemStats.disk_percent)}%</span>
+                                </div>
+                                <span className="text-[8px] text-[#86868b] mt-1.5 font-mono">{systemStats.disk_used_gb}/{systemStats.disk_total_gb} GB</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Brightness Control Slider */}
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <span className="text-xs font-semibold text-[#86868b]">Яркость экрана ПК</span>
+                            <div className="flex items-center gap-3 bg-black/5 dark:bg-white/5 p-2 rounded-xl border border-black/5 dark:border-white/5">
+                              <Sun size={16} className="text-[#86868b]" />
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                defaultValue="80"
+                                onChange={(e) => {
+                                  handleSetBrightness(parseInt(e.target.value));
+                                }}
+                                className="flex-1 h-1.5 bg-black/10 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                              />
                             </div>
                           </div>
 
@@ -1083,6 +1191,299 @@ export default function App() {
                           </div>
                         </>
                       )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'gamepad' && (
+                  <motion.div 
+                    key="gamepad"
+                    className="w-full aspect-[1.1] glass-card rounded-[36px] p-5 relative flex flex-col justify-between select-none"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={springTransition}
+                  >
+                    {/* Top Bumpers */}
+                    <div className="flex justify-between w-full px-2 shrink-0">
+                      <button
+                        onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'q', type: 'keydown' })}
+                        onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'q', type: 'keyup' })}
+                        onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'q', type: 'keydown' })}
+                        onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'q', type: 'keyup' })}
+                        className="px-6 py-2 rounded-xl bg-black/10 dark:bg-white/10 active:bg-black/20 dark:active:bg-white/20 text-xs font-bold text-[var(--text-primary)] border border-black/5 dark:border-white/5"
+                      >
+                        L
+                      </button>
+                      <button
+                        onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'e', type: 'keydown' })}
+                        onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'e', type: 'keyup' })}
+                        onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'e', type: 'keydown' })}
+                        onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'e', type: 'keyup' })}
+                        className="px-6 py-2 rounded-xl bg-black/10 dark:bg-white/10 active:bg-black/20 dark:active:bg-white/20 text-xs font-bold text-[var(--text-primary)] border border-black/5 dark:border-white/5"
+                      >
+                        R
+                      </button>
+                    </div>
+
+                    {/* Main Gamepad Area */}
+                    <div className="flex-1 flex items-center justify-between my-2 px-1">
+                      {/* D-Pad (Cross buttons) */}
+                      <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
+                        <div className="absolute w-8 h-24 bg-black/5 dark:bg-white/5 rounded-lg border border-black/5 dark:border-white/5"></div>
+                        <div className="absolute w-24 h-8 bg-black/5 dark:bg-white/5 rounded-lg border border-black/5 dark:border-white/5"></div>
+                        
+                        {/* D-PAD buttons */}
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'up', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'up', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'up', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'up', type: 'keyup' })}
+                          className="absolute top-0 w-8 h-8 flex items-center justify-center text-[var(--text-primary)] active:bg-blue-500/20 rounded-t-lg"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'down', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'down', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'down', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'down', type: 'keyup' })}
+                          className="absolute bottom-0 w-8 h-8 flex items-center justify-center text-[var(--text-primary)] active:bg-blue-500/20 rounded-b-lg"
+                        >
+                          ▼
+                        </button>
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'left', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'left', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'left', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'left', type: 'keyup' })}
+                          className="absolute left-0 w-8 h-8 flex items-center justify-center text-[var(--text-primary)] active:bg-blue-500/20 rounded-l-lg"
+                        >
+                          ◀
+                        </button>
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'right', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'right', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'right', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'right', type: 'keyup' })}
+                          className="absolute right-0 w-8 h-8 flex items-center justify-center text-[var(--text-primary)] active:bg-blue-500/20 rounded-r-lg"
+                        >
+                          ▶
+                        </button>
+                      </div>
+
+                      {/* Action buttons (XYAB) */}
+                      <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
+                        {/* Y (top) */}
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'v', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'v', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'v', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'v', type: 'keyup' })}
+                          className="absolute top-0 w-8 h-8 rounded-full bg-yellow-500/80 active:bg-yellow-600 text-white font-bold text-xs shadow-sm flex items-center justify-center"
+                        >
+                          Y
+                        </button>
+                        {/* A (bottom) */}
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'z', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'z', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'z', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'z', type: 'keyup' })}
+                          className="absolute bottom-0 w-8 h-8 rounded-full bg-green-500/80 active:bg-green-600 text-white font-bold text-xs shadow-sm flex items-center justify-center"
+                        >
+                          A
+                        </button>
+                        {/* X (left) */}
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'c', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'c', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'c', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'c', type: 'keyup' })}
+                          className="absolute left-0 w-8 h-8 rounded-full bg-blue-500/80 active:bg-blue-600 text-white font-bold text-xs shadow-sm flex items-center justify-center"
+                        >
+                          X
+                        </button>
+                        {/* B (right) */}
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'x', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'x', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'x', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'x', type: 'keyup' })}
+                          className="absolute right-0 w-8 h-8 rounded-full bg-red-500/80 active:bg-red-600 text-white font-bold text-xs shadow-sm flex items-center justify-center"
+                        >
+                          B
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Select / Start Center row */}
+                    <div className="flex justify-center gap-6 pb-2 w-full shrink-0">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'space', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'space', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'space', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'space', type: 'keyup' })}
+                          className="w-10 h-3 rounded-full bg-black/20 dark:bg-white/20 active:bg-black/30 dark:active:bg-white/30"
+                        />
+                        <span className="text-[8px] font-bold text-[#86868b] uppercase">Select</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <button
+                          onTouchStart={() => sendEvent({ event: 'keyboard_input', key: 'enter', type: 'keydown' })}
+                          onTouchEnd={() => sendEvent({ event: 'keyboard_input', key: 'enter', type: 'keyup' })}
+                          onMouseDown={() => sendEvent({ event: 'keyboard_input', key: 'enter', type: 'keydown' })}
+                          onMouseUp={() => sendEvent({ event: 'keyboard_input', key: 'enter', type: 'keyup' })}
+                          className="w-10 h-3 rounded-full bg-black/20 dark:bg-white/20 active:bg-black/30 dark:active:bg-white/30"
+                        />
+                        <span className="text-[8px] font-bold text-[#86868b] uppercase">Start</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'terminal' && (
+                  <motion.div 
+                    key="terminal"
+                    className="w-full aspect-[1.1] glass-card rounded-[36px] p-5 relative flex flex-col gap-3 overflow-hidden"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={springTransition}
+                  >
+                    <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2 shrink-0">
+                      <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                        <Terminal size={14} className="text-emerald-500" />
+                        Консоль CMD/PowerShell
+                      </span>
+                      {terminalHistory.length > 0 && (
+                        <button
+                          onClick={() => setTerminalHistory([])}
+                          className="text-[9px] font-bold text-red-500 hover:text-red-600 bg-red-500/10 px-2 py-0.5 rounded"
+                        >
+                          Очистить
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Monospace Output Screen */}
+                    <div className="flex-1 bg-black/90 rounded-2xl p-3 font-mono text-[9px] text-emerald-400 overflow-y-auto flex flex-col gap-2 border border-black/10">
+                      {terminalHistory.length === 0 ? (
+                        <span className="text-gray-500">// Введите команду ниже и нажмите Выполнить...</span>
+                      ) : (
+                        terminalHistory.map((item, idx) => (
+                          <div key={idx} className="flex flex-col gap-0.5 border-b border-white/5 pb-1">
+                            <span className="text-white font-semibold">C:\Users\PC&gt; {item.cmd}</span>
+                            {item.out && <span className="whitespace-pre-wrap">{item.out}</span>}
+                            {item.err && <span className="text-red-400 whitespace-pre-wrap">{item.err}</span>}
+                            <span className="text-gray-400 text-[8px]">Выполнено с кодом {item.code}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Input Field and Execution controls */}
+                    <div className="flex gap-2 shrink-0">
+                      <input
+                        type="text"
+                        placeholder="Введите команду (например, ipconfig)..."
+                        value={terminalCommand}
+                        onChange={(e) => setTerminalCommand(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isRunningCommand) {
+                            handleRunTerminalCommand();
+                          }
+                        }}
+                        disabled={isRunningCommand}
+                        className="flex-1 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500 text-[var(--text-primary)]"
+                      />
+                      <button
+                        onClick={handleRunTerminalCommand}
+                        disabled={isRunningCommand || !terminalCommand.trim()}
+                        className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/40 text-white font-bold rounded-xl text-xs transition-colors shrink-0 active:scale-[0.97]"
+                      >
+                        {isRunningCommand ? 'Запуск...' : 'Запуск'}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'presenter' && (
+                  <motion.div 
+                    key="presenter"
+                    className="w-full aspect-[1.1] glass-card rounded-[36px] p-5 relative flex flex-col justify-between"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={springTransition}
+                  >
+                    {/* Header with Title and Stopwatch Timer */}
+                    <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2 shrink-0">
+                      <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                        <Presentation size={14} className="text-blue-500" />
+                        Режим презентации
+                      </span>
+                      
+                      {/* Timer Display */}
+                      <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 px-2.5 py-1 rounded-xl border border-black/5 dark:border-white/5 font-mono text-xs font-bold text-[var(--text-primary)]">
+                        <span>
+                          {(() => {
+                            const min = Math.floor(presenterTime / 60);
+                            const sec = presenterTime % 60;
+                            return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+                          })()}
+                        </span>
+                        <button
+                          onClick={() => setIsTimerRunning(!isTimerRunning)}
+                          className={`w-2 h-2 rounded-full ${isTimerRunning ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}
+                        />
+                        {presenterTime > 0 && (
+                          <button
+                            onClick={() => {
+                              setIsTimerRunning(false);
+                              setPresenterTime(0);
+                            }}
+                            className="text-[8px] bg-red-500/10 text-red-500 px-1 py-0.5 rounded font-bold"
+                          >
+                            Сброс
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Giant Presentation slide navigation buttons */}
+                    <div className="flex-1 flex gap-3 my-3">
+                      <button
+                        onClick={() => sendEvent({ event: 'keyboard_input', key: 'pageup', type: 'press' })}
+                        className="flex-1 rounded-[24px] bg-black/5 dark:bg-white/5 active:bg-black/10 dark:active:bg-white/10 text-xs font-bold text-[var(--text-primary)] border border-black/5 dark:border-white/5 flex flex-col items-center justify-center gap-1 active:scale-[0.98] transition-all"
+                      >
+                        <span className="text-xl">◀</span>
+                        <span>Назад</span>
+                      </button>
+                      <button
+                        onClick={() => sendEvent({ event: 'keyboard_input', key: 'pagedown', type: 'press' })}
+                        className="flex-1 rounded-[24px] bg-blue-500/10 dark:bg-blue-500/20 active:bg-blue-500/20 border border-blue-500/20 text-blue-500 font-bold text-xs flex flex-col items-center justify-center gap-1 active:scale-[0.98] transition-all"
+                      >
+                        <span className="text-xl">▶</span>
+                        <span>Вперед</span>
+                      </button>
+                    </div>
+
+                    {/* Additional helper buttons */}
+                    <div className="grid grid-cols-2 gap-2 shrink-0">
+                      <button
+                        onClick={() => sendEvent({ event: 'keyboard_input', key: 'f5', type: 'press' })}
+                        className="py-2.5 rounded-xl bg-black/5 dark:bg-white/5 active:bg-black/10 dark:active:bg-white/10 text-[10px] font-bold text-[var(--text-primary)] border border-black/5 dark:border-white/5"
+                      >
+                        Запуск (F5)
+                      </button>
+                      <button
+                        onClick={() => sendEvent({ event: 'keyboard_input', key: 'esc', type: 'press' })}
+                        className="py-2.5 rounded-xl bg-black/5 dark:bg-white/5 active:bg-black/10 dark:active:bg-white/10 text-[10px] font-bold text-[var(--text-primary)] border border-black/5 dark:border-white/5"
+                      >
+                        Закрыть (Esc)
+                      </button>
                     </div>
                   </motion.div>
                 )}

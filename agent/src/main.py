@@ -63,6 +63,12 @@ class ProcessKillRequest(BaseModel):
 class NotificationRequest(BaseModel):
     message: str
 
+class BrightnessRequest(BaseModel):
+    level: int
+
+class TerminalRequest(BaseModel):
+    command: str
+
 def print_qr_code(url: str, hostname_url: str):
     try:
         import qrcode
@@ -363,6 +369,17 @@ def get_system_stats():
         cpu_name = platform.processor() or "Unknown CPU"
         hostname = platform.node()
         
+        # Battery stats
+        battery_pct = None
+        battery_plugged = None
+        try:
+            bat = psutil.sensors_battery()
+            if bat:
+                battery_pct = bat.percent
+                battery_plugged = bat.power_plugged
+        except:
+            pass
+        
         return {
             "cpu_percent": cpu_pct,
             "ram_percent": ram_pct,
@@ -374,7 +391,9 @@ def get_system_stats():
             "uptime_seconds": uptime_sec,
             "os_name": os_name,
             "cpu_name": cpu_name,
-            "hostname": hostname
+            "hostname": hostname,
+            "battery_percent": battery_pct,
+            "battery_plugged": battery_plugged
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -415,6 +434,82 @@ def send_notification(req: NotificationRequest):
             ctypes.windll.user32.MessageBoxW(0, req.message, "Orbit Remote Alert", 0x00000040 | 0x00010000)
         threading.Thread(target=show_box, daemon=True).start()
         return {"status": "sent"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/system/brightness")
+def set_brightness(req: BrightnessRequest):
+    try:
+        level = max(0, min(100, req.level))
+        
+        # 1. Try laptop-based WMI methods (PowerShell)
+        try:
+            import subprocess
+            cmd = f"Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{ Timeout = 0; Brightness = {level} }}"
+            subprocess.run(["powershell", "-Command", cmd], capture_output=True)
+        except:
+            pass
+
+        # 2. Try desktop-based DDC/CI monitor API (via dxva2 / GetPhysicalMonitors)
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
+            
+            class PHYSICAL_MONITOR(ctypes.Structure):
+                _fields_ = [
+                    ('hPhysicalMonitor', wintypes.HANDLE),
+                    ('szPhysicalMonitorDescription', wintypes.WCHAR * PHYSICAL_MONITOR_DESCRIPTION_SIZE)
+                ]
+                
+            def get_monitors():
+                monitors = []
+                def callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+                    monitors.append(hMonitor)
+                    return True
+                    
+                MonitorEnumProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
+                ctypes.windll.user32.EnumDisplayMonitors(None, None, MonitorEnumProc(callback), 0)
+                return monitors
+
+            for hMonitor in get_monitors():
+                num_monitors = wintypes.DWORD()
+                if ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ctypes.byref(num_monitors)):
+                    physical_monitors = (PHYSICAL_MONITOR * num_monitors.value)()
+                    if ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(hMonitor, num_monitors, physical_monitors):
+                        for pm in physical_monitors:
+                            ctypes.windll.dxva2.SetMonitorBrightness(pm.hPhysicalMonitor, level)
+                        ctypes.windll.dxva2.DestroyPhysicalMonitors(num_monitors, physical_monitors)
+        except:
+            pass
+            
+        return {"status": "success", "level": level}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/system/terminal")
+def run_terminal(req: TerminalRequest):
+    try:
+        import subprocess
+        res = subprocess.run(
+            req.command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        return {
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "return_code": res.returncode
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "stdout": "",
+            "stderr": "Command execution timed out (10s limit)",
+            "return_code": -1
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
