@@ -26,15 +26,24 @@ export default function PairingFlow({ onClose, onSuccess }: PairingFlowProps) {
   const [step, setStep] = useState<'select' | 'pin' | 'success' | 'error'>('select');
   const [errorMessage, setErrorMessage] = useState('');
 
+  const getBaseUrl = (ipOrUrl: string) => {
+    const trimmed = ipOrUrl.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    return `http://${trimmed}:23810`;
+  };
+
   const handleManualAdd = async () => {
     if (!manualIp) return;
     try {
       setErrorMessage('');
-      const res = await fetch(`http://${manualIp}:23810/api/v1/ping`);
+      const targetUrl = getBaseUrl(manualIp);
+      const res = await fetch(`${targetUrl}/api/v1/ping`);
       const data = await res.json();
       if (data.status === 'online') {
         initiatePairing({
-          ip: manualIp,
+          ip: targetUrl,
           port: 23810,
           name: data.agent_name,
           os: data.os,
@@ -46,7 +55,7 @@ export default function PairingFlow({ onClose, onSuccess }: PairingFlowProps) {
       }
     } catch (err: any) {
       setStep('error');
-      setErrorMessage('Не удалось подключиться к указанному IP. Убедитесь, что Orbit Agent запущен.');
+      setErrorMessage('Не удалось подключиться к указанному хосту. Убедитесь, что Orbit Agent запущен.');
     }
   };
 
@@ -54,14 +63,11 @@ export default function PairingFlow({ onClose, onSuccess }: PairingFlowProps) {
     setPairingDevice(device);
     try {
       setErrorMessage('');
-      
-      // Generate Client UUID
       const clientUuid = window.crypto.randomUUID();
-      
-      // Generate Mock ECC Public Key (standard string for simplicity of demonstration)
       const mockPublicKey = "ECDSA_PUB_KEY_" + clientUuid;
 
-      const res = await fetch(`http://${device.ip}:23810/api/v1/pair/initiate`, {
+      const targetUrl = getBaseUrl(device.ip);
+      const res = await fetch(`${targetUrl}/api/v1/pair/initiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -88,7 +94,8 @@ export default function PairingFlow({ onClose, onSuccess }: PairingFlowProps) {
     if (!pairingDevice || !pin) return;
     try {
       setErrorMessage('');
-      const res = await fetch(`http://${pairingDevice.ip}:23810/api/v1/pair/verify`, {
+      const targetUrl = getBaseUrl(pairingDevice.ip);
+      const res = await fetch(`${targetUrl}/api/v1/pair/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -105,14 +112,14 @@ export default function PairingFlow({ onClose, onSuccess }: PairingFlowProps) {
       if (data.status === 'paired') {
         // Save to client Dexie db
         await db.devices.add({
-          uuid: sessionToken, // Using session token or generating UUID
+          uuid: sessionToken,
           name: pairingDevice.name,
-          ipAddress: pairingDevice.ip,
+          ipAddress: targetUrl,
           port: pairingDevice.port,
-          macAddress: '00:00:00:00:00:00', // Mocked or fetched from ping info in production
+          macAddress: '00:00:00:00:00:00',
           osName: pairingDevice.os,
           osVersion: pairingDevice.version,
-          sharedSecret: data.encrypted_shared_secret, // Save shared secret for signing commands
+          sharedSecret: data.encrypted_shared_secret,
           isPaired: true,
           lastConnected: new Date()
         });

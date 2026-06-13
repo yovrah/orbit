@@ -39,7 +39,15 @@ export function useWebSocket(device: Device | null) {
       wsRef.current.close();
     }
 
-    const wsUrl = `ws://${device.ipAddress}:${device.port}/ws/control`;
+    let wsUrl = '';
+    const base = device.ipAddress;
+    if (base.startsWith('https://')) {
+      wsUrl = base.replace('https://', 'wss://') + '/ws/control';
+    } else if (base.startsWith('http://')) {
+      wsUrl = base.replace('http://', 'ws://') + '/ws/control';
+    } else {
+      wsUrl = `ws://${base}:${device.port}/ws/control`;
+    }
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
