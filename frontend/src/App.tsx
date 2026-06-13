@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'remote' | 'screen' | 'keyboard' | 'files' | 'apps'>('remote');
+  const [activeTab, setActiveTab] = useState<'remote' | 'screen' | 'keyboard' | 'files' | 'apps' | 'stats'>('remote');
   const [activeNav, setActiveNav] = useState<'apps' | 'history' | 'settings'>('apps');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showPairing, setShowPairing] = useState(false);
@@ -49,6 +49,23 @@ export default function App() {
   const [appSearchQuery, setAppSearchQuery] = useState('');
   const [appsMode, setAppsMode] = useState<'launch' | 'processes'>('launch');
   const [isLoadingApps, setIsLoadingApps] = useState(false);
+
+  // System Stats state
+  const [systemStats, setSystemStats] = useState<{
+    cpu_percent: number;
+    ram_percent: number;
+    ram_used_gb: number;
+    ram_total_gb: number;
+    disk_percent: number;
+    disk_used_gb: number;
+    disk_total_gb: number;
+    uptime_seconds: number;
+    os_name: string;
+    cpu_name: string;
+    hostname: string;
+  } | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [alertText, setAlertText] = useState('');
 
   // Read paired devices from IndexedDB
   const devices = useLiveQuery(() => db.devices.toArray()) || [];
@@ -153,6 +170,19 @@ export default function App() {
     }
   }, [activeDevice]);
 
+  const fetchSystemStats = useCallback(async () => {
+    if (!activeDevice) return;
+    try {
+      const res = await fetch(`${activeDevice.ipAddress}/api/v1/system/stats`);
+      if (res.ok) {
+        const data = await res.json();
+        setSystemStats(data);
+      }
+    } catch (err) {
+      console.error('Error fetching system stats:', err);
+    }
+  }, [activeDevice]);
+
   useEffect(() => {
     if (activeTab === 'files' && activeDevice) {
       fetchFiles(currentPath);
@@ -169,6 +199,15 @@ export default function App() {
       return () => clearInterval(interval);
     }
   }, [activeTab, activeDevice, fetchScannedApps, fetchRunningProcesses]);
+
+  useEffect(() => {
+    if (activeTab === 'stats' && activeDevice) {
+      setIsLoadingStats(true);
+      fetchSystemStats().finally(() => setIsLoadingStats(false));
+      const interval = setInterval(fetchSystemStats, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, activeDevice, fetchSystemStats]);
 
   // Screen stream touch handlers
   const screenTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -351,6 +390,54 @@ export default function App() {
     }
   };
 
+  const handleToggleMute = async () => {
+    if (!activeDevice) return;
+    try {
+      await fetch(`${activeDevice.ipAddress}/api/v1/system/volume/mute`, { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to toggle mute:', err);
+    }
+  };
+
+  const handleMonitorOff = async () => {
+    if (!activeDevice) return;
+    try {
+      await fetch(`${activeDevice.ipAddress}/api/v1/system/monitor/off`, { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to turn off monitor:', err);
+    }
+  };
+
+  const handleEmptyRecycleBin = async () => {
+    if (!activeDevice) return;
+    if (!confirm('Очистить корзину на ПК?')) return;
+    try {
+      const res = await fetch(`${activeDevice.ipAddress}/api/v1/system/recycle-bin/empty`, { method: 'POST' });
+      if (res.ok) {
+        alert('Корзина очищена!');
+      }
+    } catch (err) {
+      console.error('Failed to empty recycle bin:', err);
+    }
+  };
+
+  const handleSendNotification = async () => {
+    if (!activeDevice || !alertText.trim()) return;
+    try {
+      const res = await fetch(`${activeDevice.ipAddress}/api/v1/system/notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: alertText })
+      });
+      if (res.ok) {
+        alert('Сообщение отправлено на ПК!');
+        setAlertText('');
+      }
+    } catch (err) {
+      console.error('Failed to send alert notification:', err);
+    }
+  };
+
   const springTransition = {
     type: "spring",
     stiffness: 400,
@@ -368,7 +455,8 @@ export default function App() {
     { id: 'screen', label: 'Экран' },
     { id: 'keyboard', label: 'Клавиши' },
     { id: 'files', label: 'Файлы' },
-    { id: 'apps', label: 'Программы' }
+    { id: 'apps', label: 'Программы' },
+    { id: 'stats', label: 'Дашборд' }
   ];
 
   // Resolve Connection Status Badge
@@ -422,12 +510,12 @@ export default function App() {
         {activeNav === 'apps' && (
           <>
             {/* 2. TABS SELECTOR */}
-            <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 p-1 rounded-2xl mt-5">
+            <div className="flex items-center bg-black/5 dark:bg-white/5 p-1 rounded-2xl mt-5 overflow-x-auto scrollbar-none flex-nowrap w-full gap-0.5">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className="relative flex-1 py-2 text-xs font-medium rounded-xl transition-all duration-300"
+                  className="relative shrink-0 px-3.5 py-2 text-xs font-medium rounded-xl transition-all duration-300"
                 >
                   {activeTab === tab.id && (
                     <motion.div
@@ -436,7 +524,7 @@ export default function App() {
                       transition={springTransition}
                     />
                   )}
-                  <span className={`relative z-10 transition-colors duration-300 ${
+                  <span className={`relative z-10 transition-colors duration-300 whitespace-nowrap ${
                     activeTab === tab.id 
                       ? 'text-white dark:text-black font-semibold' 
                       : 'text-[#86868b] hover:text-[var(--text-primary)]'
@@ -852,6 +940,148 @@ export default function App() {
                             </div>
                           ));
                         })()
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'stats' && (
+                  <motion.div 
+                    key="stats"
+                    className="w-full aspect-[1.1] glass-card rounded-[36px] p-5 relative flex flex-col gap-3 overflow-hidden"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={springTransition}
+                  >
+                    <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2 shrink-0">
+                      <span className="text-xs font-bold text-[var(--text-primary)]">Мониторинг ресурсов</span>
+                      <button
+                        onClick={fetchSystemStats}
+                        className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 text-[#86868b] hover:text-[var(--text-primary)] shrink-0"
+                      >
+                        <RefreshCw size={14} className={isLoadingStats ? "animate-spin" : ""} />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-4 scrollbar-thin">
+                      {isLoadingStats && !systemStats ? (
+                        <div className="flex flex-col items-center justify-center py-10 gap-2">
+                          <RefreshCw size={24} className="animate-spin text-[#86868b]" />
+                          <span className="text-xs text-[#86868b]">Получение данных...</span>
+                        </div>
+                      ) : !systemStats ? (
+                        <div className="text-center py-10 text-xs text-[#86868b]">
+                          Не удалось загрузить данные
+                        </div>
+                      ) : (
+                        <>
+                          {/* Hardware Resources Grid */}
+                          <div className="grid grid-cols-3 gap-3">
+                            {/* CPU */}
+                            <div className="bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3 rounded-2xl flex flex-col items-center text-center">
+                              <span className="text-[10px] font-bold text-[#86868b] uppercase">CPU</span>
+                              <div className="relative w-12 h-12 flex items-center justify-center mt-2">
+                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                  <path className="text-black/10 dark:text-white/10" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                  <path className="text-blue-500 transition-all duration-500" strokeDasharray={`${systemStats.cpu_percent}, 100`} strokeWidth="3.5" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                </svg>
+                                <span className="absolute text-[10px] font-bold text-[var(--text-primary)]">{Math.round(systemStats.cpu_percent)}%</span>
+                              </div>
+                            </div>
+
+                            {/* RAM */}
+                            <div className="bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3 rounded-2xl flex flex-col items-center text-center">
+                              <span className="text-[10px] font-bold text-[#86868b] uppercase">RAM</span>
+                              <div className="relative w-12 h-12 flex items-center justify-center mt-2">
+                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                  <path className="text-black/10 dark:text-white/10" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                  <path className="text-emerald-500 transition-all duration-500" strokeDasharray={`${systemStats.ram_percent}, 100`} strokeWidth="3.5" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                </svg>
+                                <span className="absolute text-[10px] font-bold text-[var(--text-primary)]">{Math.round(systemStats.ram_percent)}%</span>
+                              </div>
+                              <span className="text-[8px] text-[#86868b] mt-1.5 font-mono">{systemStats.ram_used_gb}/{systemStats.ram_total_gb} GB</span>
+                            </div>
+
+                            {/* Disk */}
+                            <div className="bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3 rounded-2xl flex flex-col items-center text-center">
+                              <span className="text-[10px] font-bold text-[#86868b] uppercase">Disk C:</span>
+                              <div className="relative w-12 h-12 flex items-center justify-center mt-2">
+                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                  <path className="text-black/10 dark:text-white/10" strokeWidth="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                  <path className="text-purple-500 transition-all duration-500" strokeDasharray={`${systemStats.disk_percent}, 100`} strokeWidth="3.5" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                </svg>
+                                <span className="absolute text-[10px] font-bold text-[var(--text-primary)]">{Math.round(systemStats.disk_percent)}%</span>
+                              </div>
+                              <span className="text-[8px] text-[#86868b] mt-1.5 font-mono">{systemStats.disk_used_gb}/{systemStats.disk_total_gb} GB</span>
+                            </div>
+                          </div>
+
+                          {/* Specifications & Info */}
+                          <div className="bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3.5 rounded-2xl flex flex-col gap-1.5 text-xs text-[var(--text-primary)] leading-normal">
+                            <div className="flex justify-between items-center text-[10px] text-[#86868b] border-b border-black/5 dark:border-white/5 pb-1 uppercase font-bold tracking-wider">
+                              <span>Параметры системы</span>
+                              <span>Orbit Agent</span>
+                            </div>
+                            <div className="flex justify-between mt-1"><span className="text-[#86868b]">Имя ПК:</span><span className="font-semibold font-mono">{systemStats.hostname}</span></div>
+                            <div className="flex justify-between"><span className="text-[#86868b]">ОС:</span><span className="font-semibold">{systemStats.os_name}</span></div>
+                            <div className="flex justify-between overflow-hidden"><span className="text-[#86868b] shrink-0">Процессор:</span><span className="font-semibold truncate max-w-[150px] text-right" title={systemStats.cpu_name}>{systemStats.cpu_name}</span></div>
+                            <div className="flex justify-between"><span className="text-[#86868b]">Uptime:</span><span className="font-semibold">
+                              {(() => {
+                                const h = Math.floor(systemStats.uptime_seconds / 3600);
+                                const m = Math.floor((systemStats.uptime_seconds % 3600) / 60);
+                                return `${h} ч ${m} мин`;
+                              })()}
+                            </span></div>
+                          </div>
+
+                          {/* System Macros Utility Grid */}
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-xs font-bold text-[#86868b]">Системные утилиты</span>
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                onClick={handleMonitorOff}
+                                className="py-2.5 rounded-xl bg-black/5 dark:bg-white/5 active:bg-black/10 dark:active:bg-white/10 text-[10px] font-semibold text-[var(--text-primary)] transition-colors border border-black/5 dark:border-white/5 flex flex-col items-center justify-center gap-1 active:scale-[0.98]"
+                              >
+                                <Tv size={14} className="text-purple-500" />
+                                <span>Выкл. Экран</span>
+                              </button>
+
+                              <button
+                                onClick={handleToggleMute}
+                                className="py-2.5 rounded-xl bg-black/5 dark:bg-white/5 active:bg-black/10 dark:active:bg-white/10 text-[10px] font-semibold text-[var(--text-primary)] transition-colors border border-black/5 dark:border-white/5 flex flex-col items-center justify-center gap-1 active:scale-[0.98]"
+                              >
+                                <Volume2 size={14} className="text-emerald-500" />
+                                <span>Без Звука</span>
+                              </button>
+
+                              <button
+                                onClick={handleEmptyRecycleBin}
+                                className="py-2.5 rounded-xl bg-black/5 dark:bg-white/5 active:bg-black/10 dark:active:bg-white/10 text-[10px] font-semibold text-[var(--text-primary)] transition-colors border border-black/5 dark:border-white/5 flex flex-col items-center justify-center gap-1 active:scale-[0.98]"
+                              >
+                                <X size={14} className="text-red-500" />
+                                <span>Очистить корзину</span>
+                              </button>
+                            </div>
+
+                            {/* Alert Notification Sender */}
+                            <div className="flex gap-1.5 mt-1 bg-black/5 dark:bg-white/5 p-2 rounded-2xl border border-black/5 dark:border-white/5">
+                              <input
+                                type="text"
+                                placeholder="Отправить alert на ПК..."
+                                value={alertText}
+                                onChange={(e) => setAlertText(e.target.value)}
+                                className="flex-1 bg-transparent border-none text-xs focus:outline-none text-[var(--text-primary)] placeholder-[#86868b]"
+                              />
+                              <button
+                                onClick={handleSendNotification}
+                                className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg text-[10px] transition-colors active:scale-[0.96]"
+                              >
+                                Послать
+                              </button>
+                            </div>
+                          </div>
+                        </>
                       )}
                     </div>
                   </motion.div>

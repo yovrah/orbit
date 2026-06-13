@@ -62,3 +62,15 @@ def wake_on_lan(mac_address: str):
     s.close()
     
     print(f"WoL Magic Packet broadcasted to MAC: {mac_address}")
+
+def toggle_mute() -> bool:
+    try:
+        volume = get_volume_interface()
+        is_muted = volume.GetMute()
+        new_mute = not is_muted
+        volume.SetMute(new_mute, None)
+        print(f"System volume mute toggled: {new_mute}")
+        return new_mute
+    except Exception as e:
+        print(f"Error toggling mute: {e}")
+        return False

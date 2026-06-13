@@ -60,6 +60,9 @@ class ProcessKillRequest(BaseModel):
     hwnd: int = None
     pid: int = None
 
+class NotificationRequest(BaseModel):
+    message: str
+
 def print_qr_code(url: str, hostname_url: str):
     try:
         import qrcode
@@ -322,6 +325,96 @@ def kill_process(req: ProcessKillRequest):
         if not closed:
             raise HTTPException(status_code=400, detail="Either hwnd or pid must be specified")
         return {"status": "killed", "hwnd": req.hwnd, "pid": req.pid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/system/stats")
+def get_system_stats():
+    try:
+        import platform
+        import psutil
+        import time
+        
+        # CPU Load
+        cpu_pct = psutil.cpu_percent(interval=None)
+        
+        # Memory
+        mem = psutil.virtual_memory()
+        ram_pct = mem.percent
+        ram_used = round(mem.used / (1024**3), 1)
+        ram_total = round(mem.total / (1024**3), 1)
+        
+        # Disk C:
+        try:
+            disk = psutil.disk_usage('C:\\')
+            disk_pct = disk.percent
+            disk_used = round(disk.used / (1024**3), 1)
+            disk_total = round(disk.total / (1024**3), 1)
+        except:
+            disk_pct = 0.0
+            disk_used = 0.0
+            disk_total = 0.0
+            
+        # Uptime
+        uptime_sec = time.time() - psutil.boot_time()
+        
+        # Specs
+        os_name = f"{platform.system()} {platform.release()}"
+        cpu_name = platform.processor() or "Unknown CPU"
+        hostname = platform.node()
+        
+        return {
+            "cpu_percent": cpu_pct,
+            "ram_percent": ram_pct,
+            "ram_used_gb": ram_used,
+            "ram_total_gb": ram_total,
+            "disk_percent": disk_pct,
+            "disk_used_gb": disk_used,
+            "disk_total_gb": disk_total,
+            "uptime_seconds": uptime_sec,
+            "os_name": os_name,
+            "cpu_name": cpu_name,
+            "hostname": hostname
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/system/monitor/off")
+def monitor_off():
+    try:
+        import win32gui
+        import win32con
+        win32gui.SendMessage(win32con.HWND_BROADCAST, win32con.WM_SYSCOMMAND, win32con.SC_MONITORPOWER, 2)
+        return {"status": "monitor_turned_off"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/system/volume/mute")
+def volume_mute():
+    try:
+        new_state = system_controls.toggle_mute()
+        return {"status": "muted" if new_state else "unmuted", "is_muted": new_state}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/system/recycle-bin/empty")
+def empty_recycle_bin():
+    try:
+        import ctypes
+        res = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 7)
+        return {"status": "success", "result_code": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/system/notification")
+def send_notification(req: NotificationRequest):
+    try:
+        import ctypes
+        import threading
+        def show_box():
+            ctypes.windll.user32.MessageBoxW(0, req.message, "Orbit Remote Alert", 0x00000040 | 0x00010000)
+        threading.Thread(target=show_box, daemon=True).start()
+        return {"status": "sent"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
