@@ -3,7 +3,7 @@ import { db } from '../../../db/clientDb';
 import { DEFAULT_LAYOUT, getWidgetMeta } from './catalog';
 import type { WidgetInstance, WidgetSize, WidgetType } from './types';
 
-const LAYOUT_KEY = 'home_layout_v1';
+const LAYOUT_KEY = 'home_layout_v2';
 
 /** Reconciles a persisted layout with the current catalog: drops widgets whose
  * type no longer exists and clamps sizes the type no longer supports (e.g. the

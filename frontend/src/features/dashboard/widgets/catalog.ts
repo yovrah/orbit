@@ -120,12 +120,13 @@ export function getWidgetMeta(type: WidgetInstance['type']): WidgetMeta | undefi
   return WIDGET_CATALOG.find((w) => w.type === type);
 }
 
-/** First-run layout: Quick Actions, pinned apps, then the two narrow sliders
- * with a half-tall trackpad filling the row beside them (packs cleanly, no gaps). */
+/** First-run layout: Quick Actions on top, then a half-tall trackpad beside the
+ * two narrow sliders, and a full-width Clipboard row — matches the showcase
+ * design and packs cleanly with no gaps. */
 export const DEFAULT_LAYOUT: WidgetInstance[] = [
   { id: 'default-quick-actions', type: 'quickActions', size: '2x2' },
-  { id: 'default-pinned-apps', type: 'pinnedApps', size: '2x1' },
+  { id: 'default-trackpad', type: 'trackpad', size: '1x2' },
   { id: 'default-volume', type: 'volume', size: 'slim' },
   { id: 'default-brightness', type: 'brightness', size: 'slim' },
-  { id: 'default-trackpad', type: 'trackpad', size: '1x2' },
+  { id: 'default-clipboard', type: 'clipboard', size: '2x1' },
 ];

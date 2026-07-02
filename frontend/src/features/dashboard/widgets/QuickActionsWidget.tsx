@@ -1,3 +1,4 @@
+import { Zap } from 'lucide-react';
 import { useOrbit } from '../../../state/OrbitContext';
 import { getQuickActionMeta, resolveQuickActions } from './quickActions';
 import type { WidgetInstance } from './types';
@@ -7,16 +8,27 @@ interface QuickActionsWidgetProps {
   onPowerOn: () => void;
 }
 
+/** Choose a column count that keeps the tiles roughly square-ish and fills the
+ * widget like the iOS Control Center. */
+function columnsFor(count: number): number {
+  if (count <= 1) return 1;
+  if (count <= 3) return count;
+  if (count === 4) return 2;
+  return 3;
+}
+
 /** User-configurable grid of one-tap system actions. Which actions show is
  * stored per-instance (config.actions) and edited via the gear badge in edit
- * mode. "Power On PC" renders as a full-width row — it opens the Wake-on-LAN
- * explainer instead of hitting the agent (a web app can't send WoL packets). */
+ * mode. Tiles stretch to fill the whole widget. "Power On PC" is a green
+ * teaser button below the grid — it opens the Wake-on-LAN explainer instead
+ * of hitting the agent (a web app can't send WoL packets). */
 export function QuickActionsWidget({ instance, onPowerOn }: QuickActionsWidgetProps) {
   const { sendEvent, postSystemAction } = useOrbit();
 
   const keys = resolveQuickActions(instance.config);
   const tiles = keys.filter((k) => k !== 'powerOn');
   const hasPowerOn = keys.includes('powerOn');
+  const cols = columnsFor(tiles.length);
 
   const run = (key: string) => {
     const meta = getQuickActionMeta(key);
@@ -30,7 +42,7 @@ export function QuickActionsWidget({ instance, onPowerOn }: QuickActionsWidgetPr
   return (
     <div className="w-flex-col">
       <span className="w-title">Quick Actions</span>
-      <div className="w-qa-grid">
+      <div className="w-qa-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {tiles.map((key) => {
           const meta = getQuickActionMeta(key)!;
           const Icon = meta.icon;
@@ -41,21 +53,18 @@ export function QuickActionsWidget({ instance, onPowerOn }: QuickActionsWidgetPr
               className={`w-qa-btn ${meta.red ? 'red' : ''}`}
               onClick={() => run(key)}
             >
-              <Icon size={17} />
+              <Icon size={18} />
               <span>{meta.label}</span>
             </button>
           );
         })}
-        {hasPowerOn && (
-          <button type="button" className="w-qa-btn wide" onClick={onPowerOn}>
-            {(() => {
-              const Icon = getQuickActionMeta('powerOn')!.icon;
-              return <Icon size={15} />;
-            })()}
-            <span>Power On PC</span>
-          </button>
-        )}
       </div>
+      {hasPowerOn && (
+        <button type="button" className="w-qa-power" onClick={onPowerOn}>
+          <Zap size={16} fill="currentColor" />
+          <span>Power On PC</span>
+        </button>
+      )}
     </div>
   );
 }

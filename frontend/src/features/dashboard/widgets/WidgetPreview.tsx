@@ -10,7 +10,8 @@ import {
   ClipboardPaste,
   ClipboardCopy,
   Play,
-  ChevronRight,
+  SkipBack,
+  SkipForward,
   Wand2,
   AppWindow,
   MonitorPlay,
@@ -89,11 +90,11 @@ export function WidgetPreview({ type }: { type: WidgetType }) {
     case 'mediaControls':
       return (
         <div className="wp-media">
-          <RotateCcw size={12} />
+          <SkipBack size={12} fill="currentColor" />
           <span className="wp-media-play">
             <Play size={11} fill="currentColor" />
           </span>
-          <ChevronRight size={12} />
+          <SkipForward size={12} fill="currentColor" />
         </div>
       );
     case 'macroLauncher':

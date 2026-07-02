@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { AppWindow, Search, X } from 'lucide-react';
+import { Portal } from '../../components/Portal';
 import { Skeleton } from '../../components/Skeleton';
 import { useApps } from '../pc/useApps';
 import type { PinnedApp } from '../../types';
@@ -18,6 +19,7 @@ export function AppPicker({ onPick, onClose, launchOnPick = true }: AppPickerPro
   const { filtered, query, setQuery, launch, isLoading } = useApps();
 
   return (
+    <Portal>
     <motion.div
       className="fixed inset-0 z-[70] bg-slate-950/40 backdrop-blur-md flex items-end justify-center"
       initial={{ opacity: 0 }}
@@ -86,5 +88,6 @@ export function AppPicker({ onPick, onClose, launchOnPick = true }: AppPickerPro
         </div>
       </motion.div>
     </motion.div>
+    </Portal>
   );
 }

@@ -79,7 +79,8 @@ export function HomeGrid({
         return (
           <motion.div
             key={w.id}
-            layout
+            layout={editing}
+            initial={false}
             data-widget-id={w.id}
             className={`widget-cell ${editing ? 'editing' : ''} ${isDragging ? 'dragging' : ''}`}
             style={{

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, ChevronRight, Wand2 } from 'lucide-react';
+import { Portal } from '../../../components/Portal';
 import { useOrbit } from '../../../state/OrbitContext';
 import { AppPicker } from '../AppPicker';
 import { WidgetPreview } from './WidgetPreview';
@@ -43,7 +44,7 @@ export function AddWidgetSheet({ existingTypes, onAdd, onClose }: AddWidgetSheet
   };
 
   return (
-    <>
+    <Portal>
       <motion.div
         className="fixed inset-0 z-[65] bg-slate-950/40 backdrop-blur-md flex items-end justify-center"
         initial={{ opacity: 0 }}
@@ -144,6 +145,6 @@ export function AddWidgetSheet({ existingTypes, onAdd, onClose }: AddWidgetSheet
           onClose={() => setPickingApp(false)}
         />
       )}
-    </>
+    </Portal>
   );
 }

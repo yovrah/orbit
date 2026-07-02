@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { Portal } from '../../../components/Portal';
 import { QUICK_ACTION_CATALOG, resolveQuickActions } from './quickActions';
 import type { QuickActionKey } from './quickActions';
 import type { WidgetInstance } from './types';
@@ -25,6 +26,7 @@ export function QuickActionsConfigSheet({ instance, onChange, onClose }: QuickAc
   };
 
   return (
+    <Portal>
     <motion.div
       className="fixed inset-0 z-[70] bg-slate-950/40 backdrop-blur-md flex items-end justify-center"
       initial={{ opacity: 0 }}
@@ -77,5 +79,6 @@ export function QuickActionsConfigSheet({ instance, onChange, onClose }: QuickAc
         </div>
       </motion.div>
     </motion.div>
+    </Portal>
   );
 }

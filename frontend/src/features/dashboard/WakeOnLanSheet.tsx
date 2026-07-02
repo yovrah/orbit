@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Coffee, Zap, X } from 'lucide-react';
+import { Portal } from '../../components/Portal';
 
 const BMC_URL = 'https://buymeacoffee.com/yovrah';
 
@@ -12,6 +13,7 @@ interface WakeOnLanSheetProps {
  * support-the-project pitch. */
 export function WakeOnLanSheet({ onClose }: WakeOnLanSheetProps) {
   return (
+    <Portal>
     <motion.div
       className="fixed inset-0 z-[70] bg-slate-950/40 backdrop-blur-md flex items-end justify-center"
       initial={{ opacity: 0 }}
@@ -71,5 +73,6 @@ export function WakeOnLanSheet({ onClose }: WakeOnLanSheetProps) {
         </button>
       </motion.div>
     </motion.div>
+    </Portal>
   );
 }

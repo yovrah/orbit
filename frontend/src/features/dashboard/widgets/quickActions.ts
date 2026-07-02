@@ -44,8 +44,8 @@ export const DEFAULT_QUICK_ACTIONS: QuickActionKey[] = [
   'sleep',
   'restart',
   'shutdown',
-  'logoff',
   'screenshot',
+  'monitorOff',
   'powerOn',
 ];
 
