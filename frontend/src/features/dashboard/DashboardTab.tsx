@@ -21,7 +21,8 @@ interface DashboardTabProps {
 
 export function DashboardTab({ onNavigate }: DashboardTabProps) {
   const { activeDevice, postSystemAction } = useOrbit();
-  const { widgets, reorder, addWidget, removeWidget, resizeWidget, updateWidgetConfig } = useHomeLayout();
+  const { widgets, reorder, reorderPreview, addWidget, removeWidget, resizeWidget, updateWidgetConfig } =
+    useHomeLayout();
   const osCard = useOsCardVisibility();
 
   const [editing, setEditing] = useState(false);
@@ -90,6 +91,7 @@ export function DashboardTab({ onNavigate }: DashboardTabProps) {
         widgets={widgets}
         editing={editing}
         onReorder={reorder}
+        onReorderPreview={reorderPreview}
         onRemove={removeWidget}
         onResize={resizeWidget}
         onConfigure={setConfiguringId}

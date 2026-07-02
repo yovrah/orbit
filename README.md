@@ -25,9 +25,9 @@ volume, power actions and more. Runs as a PWA on your phone, no app store needed
 |:---:|:---:|:---:|
 | ![Onboarding](docs/screenshots/onboarding.png) | ![Home](docs/screenshots/home-light.png) | ![Dark mode](docs/screenshots/home-dark.png) |
 
-| Trackpad | Screen stream | File transfer |
+| Trackpad | File transfer | Settings |
 |:---:|:---:|:---:|
-| ![Mouse](docs/screenshots/mouse.png) | ![Stream](docs/screenshots/stream.png) | ![Transfer](docs/screenshots/transfer.png) |
+| ![Mouse](docs/screenshots/mouse.png) | ![Transfer](docs/screenshots/transfer.png) | ![Settings](docs/screenshots/settings.png) |
 
 ## Features
 
@@ -123,11 +123,12 @@ Pushing a `v*` git tag also builds and publishes this automatically via GitHub A
 
 ## Security
 
-- Works **only inside your LAN** — the agent never talks to the internet.
-- Every API request and WebSocket is authenticated with **HMAC-SHA256** and a per-device secret created during pairing.
-- QR pairing tokens are random per agent session; pairing endpoints are LAN-restricted.
+- Works **only inside your LAN** — the agent never talks to the internet. No accounts, no cloud, no analytics.
+- Every API request and WebSocket is authenticated with **HMAC-SHA256** and a per-device secret created when you pair.
+- **Pairing requires the QR code** shown on the PC: the pairing token is served only to the PC itself (loopback) and is embedded in the QR your phone scans, so another device on the Wi-Fi can't pair without seeing your screen. The PIN path is rate-limited and expires.
 - The remote terminal tool is **disabled by default** (`TERMINAL_ENABLED = False` in `agent/src/main.py`).
-- No accounts, no cloud, no analytics.
+
+> **Trust model — read this.** Orbit is a *LAN tool*. Once a phone is paired it has real control of your PC (mouse, keyboard, files, power). Run it on a **network you trust** (your home Wi-Fi), keep the agent off on public/where-you-don't-trust-everyone networks, and only pair devices you own. It is not hardened for hostile networks, and file browsing can reach anywhere your Windows user can.
 
 ## Turning the PC *on* from your phone
 

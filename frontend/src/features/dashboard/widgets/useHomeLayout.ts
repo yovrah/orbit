@@ -37,9 +37,12 @@ export function useHomeLayout() {
           const parsed = JSON.parse(row.value);
           if (Array.isArray(parsed) && parsed.length > 0) {
             const migrated = migrate(parsed);
-            setWidgets(migrated.length > 0 ? migrated : DEFAULT_LAYOUT);
-            if (JSON.stringify(migrated) !== JSON.stringify(parsed)) {
-              db.settings.put({ key: LAYOUT_KEY, value: JSON.stringify(migrated) });
+            // If everything migrated away (all types gone), fall back to the
+            // default layout AND persist it, so the user isn't reset every load.
+            const next = migrated.length > 0 ? migrated : DEFAULT_LAYOUT;
+            setWidgets(next);
+            if (JSON.stringify(next) !== JSON.stringify(parsed)) {
+              db.settings.put({ key: LAYOUT_KEY, value: JSON.stringify(next) });
             }
           }
         } catch {
@@ -55,6 +58,10 @@ export function useHomeLayout() {
     db.settings.put({ key: LAYOUT_KEY, value: JSON.stringify(next) });
   }, []);
 
+  // During a drag we reflow in memory only (reorderPreview) and write to Dexie
+  // once when the drag ends (reorder) — persisting every pointer frame spammed
+  // dozens of DB writes per second.
+  const reorderPreview = useCallback((next: WidgetInstance[]) => setWidgets(next), []);
   const reorder = useCallback((next: WidgetInstance[]) => persist(next), [persist]);
 
   const addWidget = useCallback(
@@ -94,5 +101,15 @@ export function useHomeLayout() {
 
   const resetLayout = useCallback(() => persist(DEFAULT_LAYOUT), [persist]);
 
-  return { widgets, loaded, reorder, addWidget, removeWidget, resizeWidget, updateWidgetConfig, resetLayout };
+  return {
+    widgets,
+    loaded,
+    reorder,
+    reorderPreview,
+    addWidget,
+    removeWidget,
+    resizeWidget,
+    updateWidgetConfig,
+    resetLayout,
+  };
 }

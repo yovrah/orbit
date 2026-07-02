@@ -53,7 +53,10 @@ from core import system_controls
 from core import app_scanner
 from core import icon_extractor
 
-LOCAL_SECRET = "LOCAL_SECRET"
+# Generated with 32 random bytes in lifespan() before the server accepts
+# requests. Starts as None so auth hard-fails rather than accepting a known
+# placeholder if the app is ever imported without the lifespan running.
+LOCAL_SECRET = None
 PAIRING_TOKEN = ""  # one per agent session; embedded in the QR for tap-free pairing
 TERMINAL_ENABLED = False
 STREAM_TOKENS = {}
@@ -112,10 +115,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Orbit Remote Agent", version="1.0.0", lifespan=lifespan)
 
+# The PWA is served by this same agent, so every request the app makes is
+# same-origin and needs no CORS grant. The previous wildcard LAN/`.local`
+# allow-list let any web page on the network read agent responses (secrets,
+# pairing token, file contents) — so we deliberately expose NO cross-origin
+# access. Same-origin requests are unaffected.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|.*\.local|192\.168\..*|10\..*)(:\d+)?$",
-    allow_credentials=True,
+    allow_origins=[],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -246,17 +254,20 @@ async def verify_auth_header(request: Request):
         if not client:
             raise HTTPException(status_code=401, detail="Unknown client ID")
         shared_key = client["shared_secret"]
-        
+
+    if not shared_key:
+        raise HTTPException(status_code=401, detail="Server not ready")
+
     message = f"{client_id}:{timestamp}".encode('utf-8')
     expected = hmac.new(
         shared_key.encode('utf-8'),
         message,
         hashlib.sha256
     ).hexdigest()
-    
+
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="Invalid HMAC signature")
-        
+
     return client_id
 
 AuthDep = Depends(verify_auth_header)
@@ -278,7 +289,10 @@ def verify_ws_auth(client_id: str, timestamp_str: str, signature: str, client_ho
         if not client:
             return False
         shared_key = client["shared_secret"]
-        
+
+    if not shared_key:
+        return False
+
     message = f"{client_id}:{timestamp}".encode('utf-8')
     expected = hmac.new(
         shared_key.encode('utf-8'),
@@ -314,11 +328,18 @@ def ping():
         "mac_address": get_mac_address()
     }
 
+# Short-lived PIN sessions: expire after PIN_TTL and lock after PIN_MAX_TRIES
+# wrong guesses, so a 6-digit PIN can't be brute-forced. Kept in memory since
+# pairing state is per-session anyway.
+PIN_TTL = 120  # seconds
+PIN_MAX_TRIES = 5
+PENDING_PINS = {}  # session_token -> {"expires": epoch, "tries": int}
+
 @app.post("/api/v1/pair/initiate")
 def pair_initiate(req: PairInitiateRequest):
     pin = f"{random.randint(100000, 999999)}"
     session_token = str(uuid.uuid4())
-    
+
     models.add_pending_pairing(
         session_token=session_token,
         client_id=req.client_id,
@@ -326,11 +347,12 @@ def pair_initiate(req: PairInitiateRequest):
         public_key=req.client_public_key,
         pin=pin
     )
-    
+    PENDING_PINS[session_token] = {"expires": time.time() + PIN_TTL, "tries": 0}
+
     print("\n" + "=" * 50, flush=True)
     print(f"            ORBIT PAIRING CODE: {pin}            ", flush=True)
     print("=" * 50 + "\n", flush=True)
-    
+
     return {
         "status": "pending_pin",
         "pairing_session_token": session_token
@@ -339,11 +361,25 @@ def pair_initiate(req: PairInitiateRequest):
 @app.post("/api/v1/pair/verify")
 def pair_verify(req: PairVerifyRequest):
     pending = models.get_pending_pairing(req.pairing_session_token)
-    if not pending:
+    meta = PENDING_PINS.get(req.pairing_session_token)
+    if not pending or not meta:
         raise HTTPException(status_code=400, detail="Pairing session expired or not found")
-        
-    if pending['pin'] != req.pin:
+
+    if time.time() > meta["expires"]:
+        PENDING_PINS.pop(req.pairing_session_token, None)
+        models.delete_pending_pairing(req.pairing_session_token)
+        raise HTTPException(status_code=400, detail="Pairing session expired")
+
+    if meta["tries"] >= PIN_MAX_TRIES:
+        PENDING_PINS.pop(req.pairing_session_token, None)
+        models.delete_pending_pairing(req.pairing_session_token)
+        raise HTTPException(status_code=429, detail="Too many attempts — restart pairing")
+
+    if not hmac.compare_digest(str(pending['pin']), str(req.pin)):
+        meta["tries"] += 1
         raise HTTPException(status_code=400, detail="Invalid pairing PIN code")
+
+    PENDING_PINS.pop(req.pairing_session_token, None)
         
     shared_secret = base64.b64encode(secrets.token_bytes(32)).decode('utf-8')
     
@@ -374,8 +410,13 @@ def build_pair_url() -> str:
     return f"http://{ip}:23810/?pair={PAIRING_TOKEN}"
 
 @app.get("/api/v1/pair/qrcode.png")
-def pair_qrcode():
-    """Crisp PNG of the self-pairing URL — scannable from any phone camera."""
+def pair_qrcode(request: Request):
+    """Crisp PNG of the self-pairing URL — served to the PC's own browser only
+    (loopback). The QR encodes the pairing token, so exposing it to the LAN
+    would let any device pull the token; phones scan it off the PC screen."""
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Forbidden")
     import qrcode
     img = qrcode.make(build_pair_url())
     buf = io.BytesIO()
@@ -427,19 +468,14 @@ def pair_qr(req: PairQrRequest):
         "mac_address": get_mac_address(),
     }
 
-def _is_lan_client(request: Request) -> bool:
-    host = request.client.host if request.client else ""
-    if host in ("127.0.0.1", "::1", "localhost"):
-        return True
-    if host.startswith("192.168.") or host.startswith("10."):
-        return True
-    return any(host.startswith(f"172.{i}.") for i in range(16, 32))
-
 @app.get("/api/v1/pair/token")
 def pair_token(request: Request):
-    """Hand the session pairing token to LAN clients so opening the agent's URL
-    on a phone pairs automatically. LAN-only; the agent is not exposed to WAN."""
-    if not _is_lan_client(request):
+    """Hand the session pairing token to LOOPBACK clients only (the PWA opened on
+    the PC itself). Phones must obtain the token by scanning the QR — it is
+    embedded in the QR's URL — so an untrusted device on the LAN can no longer
+    pull the token and pair without physical access to the screen."""
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
         raise HTTPException(status_code=403, detail="Forbidden")
     return {"token": PAIRING_TOKEN}
 
@@ -578,8 +614,18 @@ async def upload_file(path: str, file: UploadFile = File(...), client_id: str = 
     norm_dir = os.path.abspath(os.path.normpath(path))
     if not os.path.exists(norm_dir) or not os.path.isdir(norm_dir):
         raise HTTPException(status_code=400, detail="Invalid destination directory")
-    dest_path = os.path.normpath(os.path.join(norm_dir, file.filename))
-    if not dest_path.startswith(norm_dir):
+    # Only ever use the bare filename (strip any directory/drive components a
+    # malicious client puts in file.filename), then confirm the result is truly
+    # inside norm_dir via commonpath — a prefix check alone is bypassable
+    # (C:\Docs vs C:\Docs2) and would allow writing outside the target folder.
+    safe_name = os.path.basename(file.filename or "")
+    if not safe_name or safe_name in (".", ".."):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    dest_path = os.path.abspath(os.path.join(norm_dir, safe_name))
+    try:
+        if os.path.commonpath([norm_dir, dest_path]) != norm_dir:
+            raise HTTPException(status_code=400, detail="Path traversal detected")
+    except ValueError:
         raise HTTPException(status_code=400, detail="Path traversal detected")
     try:
         contents = await file.read()
@@ -625,10 +671,12 @@ def kill_process(req: ProcessKillRequest, client_id: str = AuthDep):
             win32gui.PostMessage(req.hwnd, 0x0010, 0, 0)
             closed = True
         if req.pid:
+            pid = int(req.pid)  # Pydantic already types this; be explicit anyway
             try:
-                os.kill(req.pid, 9)
+                os.kill(pid, 9)
             except Exception:
-                os.system(f"taskkill /F /PID {req.pid}")
+                # Never interpolate into a shell string — pass the PID as an arg.
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
             closed = True
         if not closed:
             raise HTTPException(status_code=400, detail="Either hwnd or pid must be specified")
@@ -1242,7 +1290,11 @@ async def websocket_control(websocket: WebSocket):
                     await websocket.close(code=4001)
                     return
                 shared_key = client["shared_secret"]
-                
+
+            if not shared_key:
+                await websocket.close(code=4003)
+                return
+
             message = f"{c_id}:{timestamp}".encode('utf-8')
             expected = hmac.new(
                 shared_key.encode('utf-8'),
@@ -1256,10 +1308,7 @@ async def websocket_control(websocket: WebSocket):
                 print(f"WS Connection authorized for client ID: {client_id}")
                 await websocket.send_json({"event": "auth_success"})
             else:
-                print(f"WS Auth failed: invalid HMAC signature")
-                print(f"  client_id='{c_id}', timestamp={timestamp}")
-                print(f"  expected={expected[:16]}...")
-                print(f"  received={signature[:16] if signature else 'None'}...")
+                print(f"WS Auth failed: invalid HMAC signature for client '{c_id}'")
                 await websocket.close(code=4002)
                 return
         else:

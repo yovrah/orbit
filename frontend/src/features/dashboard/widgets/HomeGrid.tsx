@@ -16,7 +16,10 @@ const SIZE_SPAN: Record<WidgetSize, { col: number; row: number }> = {
 interface HomeGridProps {
   widgets: WidgetInstance[];
   editing: boolean;
+  /** Persisting reorder — called once when a drag ends. */
   onReorder: (next: WidgetInstance[]) => void;
+  /** In-memory reorder for live reflow during a drag (no DB write). */
+  onReorderPreview: (next: WidgetInstance[]) => void;
   onRemove: (id: string) => void;
   onResize: (id: string, size: WidgetSize) => void;
   onConfigure: (id: string) => void;
@@ -24,13 +27,14 @@ interface HomeGridProps {
   onPowerOn: () => void;
 }
 
-/** iOS-style widget grid: 2 columns, dense auto-flow. In edit mode every cell
+/** iOS-style widget grid: 4-column dense auto-flow. In edit mode every cell
  * jiggles and becomes draggable — dragging over a neighbor swaps it into that
  * slot immediately, with framer-motion's `layout` animating the reflow. */
 export function HomeGrid({
   widgets,
   editing,
   onReorder,
+  onReorderPreview,
   onRemove,
   onResize,
   onConfigure,
@@ -58,7 +62,7 @@ export function HomeGrid({
     const next = [...widgets];
     const [moved] = next.splice(fromIndex, 1);
     next.splice(toIndex, 0, moved);
-    onReorder(next);
+    onReorderPreview(next);
   };
 
   return (
@@ -96,7 +100,10 @@ export function HomeGrid({
             whileDrag={{ scale: 1.1, zIndex: 20 }}
             onDragStart={() => setDraggingId(w.id)}
             onDrag={(_, info) => handleDrag(w.id, info)}
-            onDragEnd={() => setDraggingId(null)}
+            onDragEnd={() => {
+              setDraggingId(null);
+              onReorder(widgets); // persist the final order once
+            }}
             transition={{ type: 'spring', stiffness: 420, damping: 34 }}
           >
             {editing && (

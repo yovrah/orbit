@@ -42,6 +42,7 @@ export function QuickActionsWidget({ instance, onPowerOn }: QuickActionsWidgetPr
   return (
     <div className="w-flex-col">
       <span className="w-title">Quick Actions</span>
+      {tiles.length > 0 && (
       <div className="w-qa-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {tiles.map((key) => {
           const meta = getQuickActionMeta(key)!;
@@ -59,6 +60,7 @@ export function QuickActionsWidget({ instance, onPowerOn }: QuickActionsWidgetPr
           );
         })}
       </div>
+      )}
       {hasPowerOn && (
         <button type="button" className="w-qa-power" onClick={onPowerOn}>
           <Zap size={16} fill="currentColor" />

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { X, ChevronRight } from 'lucide-react';
+import { Portal } from '../../../components/Portal';
 import { MOUSE_BUTTON_CATALOG } from './catalog';
 import type { MouseButtonType } from './types';
 
@@ -11,6 +12,7 @@ interface AddMouseButtonSheetProps {
 
 export function AddMouseButtonSheet({ existingTypes, onAdd, onClose }: AddMouseButtonSheetProps) {
   return (
+    <Portal>
     <motion.div
       className="fixed inset-0 z-[65] bg-slate-950/40 backdrop-blur-md flex items-end justify-center"
       initial={{ opacity: 0 }}
@@ -71,5 +73,6 @@ export function AddMouseButtonSheet({ existingTypes, onAdd, onClose }: AddMouseB
         </div>
       </motion.div>
     </motion.div>
+    </Portal>
   );
 }

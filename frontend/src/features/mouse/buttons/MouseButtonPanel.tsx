@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown, Plus, X } from 'lucide-react';
 import { useOrbit } from '../../../state/OrbitContext';
 import { useMouseButtons } from './useMouseButtons';
@@ -64,6 +64,21 @@ export function MouseButtonPanel({ editing, showKeyboard, onToggleKeyboard }: Mo
     setDragLocked(next);
     sendEvent({ event: 'mouse_click', button: 'left', type: next ? 'down' : 'up' });
   };
+
+  // Safety net: if the panel unmounts (tab switch, app close) while Drag Lock
+  // holds the PC's left button down, release it — otherwise the button stays
+  // physically pressed and wrecks the desktop. A ref mirrors the latest state
+  // so the cleanup runs only once, on real unmount.
+  const dragLockedRef = useRef(dragLocked);
+  dragLockedRef.current = dragLocked;
+  useEffect(() => {
+    return () => {
+      if (dragLockedRef.current) {
+        sendEvent({ event: 'mouse_click', button: 'left', type: 'up' });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>, b: MouseButtonInstance) => {
     if (!editing) return;
