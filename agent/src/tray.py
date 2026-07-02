@@ -183,10 +183,18 @@ def main_tray():
 
     def wait_and_show_qr():
         # Wait for the server (and PAIRING_TOKEN) to come up, then greet the
-        # user with the QR so first launch needs zero discovery.
+        # user with the QR so first launch needs zero discovery. Once a phone
+        # has paired, stay quiet on later launches — the QR is one tray click
+        # away and popping a window at every logon gets old fast.
         for _ in range(100):
             if main.PAIRING_TOKEN and is_port_in_use(PORT):
-                qr_window.show()
+                try:
+                    from db import models
+                    already_paired = bool(models.get_all_paired_clients())
+                except Exception:
+                    already_paired = False
+                if not already_paired:
+                    qr_window.show()
                 return
             threading.Event().wait(0.2)
 

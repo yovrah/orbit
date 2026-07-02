@@ -41,4 +41,6 @@ export interface WidgetMeta {
   allowedSizes: WidgetSize[];
   /** True when only one instance of this widget makes sense on the Home screen. */
   singleton?: boolean;
+  /** True when the widget has a per-instance config sheet (gear badge in edit mode). */
+  configurable?: boolean;
 }

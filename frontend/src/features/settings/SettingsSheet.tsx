@@ -13,6 +13,7 @@ import {
   Send,
   ChevronRight,
   Info,
+  Coffee,
 } from 'lucide-react';
 import { db } from '../../db/clientDb';
 import { useOrbit } from '../../state/OrbitContext';
@@ -268,6 +269,15 @@ export function SettingsSheet({ onClose, onOpenPairing, onOpenTool }: SettingsSh
               <span className="r-name">About Orbit</span>
               <span className="r-val">v1.0.0</span>
             </div>
+            <button
+              type="button"
+              className="set-row"
+              onClick={() => window.open('https://buymeacoffee.com/yovrah', '_blank', 'noopener')}
+            >
+              <span className="r-ico" style={{ color: '#b8860b' }}><Coffee size={17} /></span>
+              <span className="r-name">Support Orbit</span>
+              <span className="r-val">☕ Buy me a coffee</span>
+            </button>
             <button type="button" className="set-row" onClick={clearPWACache}>
               <span className="r-ico"><X size={17} /></span>
               <span className="r-name">Clear Cache</span>

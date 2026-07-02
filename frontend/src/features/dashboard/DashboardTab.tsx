@@ -8,6 +8,8 @@ import { useHomeLayout } from './widgets/useHomeLayout';
 import { useOsCardVisibility } from './useOsCardVisibility';
 import { HomeGrid } from './widgets/HomeGrid';
 import { AddWidgetSheet } from './widgets/AddWidgetSheet';
+import { QuickActionsConfigSheet } from './widgets/QuickActionsConfigSheet';
+import { WakeOnLanSheet } from './WakeOnLanSheet';
 import { OsHeroCard } from './OsHeroCard';
 import type { View } from '../../types';
 
@@ -19,11 +21,15 @@ interface DashboardTabProps {
 
 export function DashboardTab({ onNavigate }: DashboardTabProps) {
   const { activeDevice, postSystemAction } = useOrbit();
-  const { widgets, reorder, addWidget, removeWidget, resizeWidget } = useHomeLayout();
+  const { widgets, reorder, addWidget, removeWidget, resizeWidget, updateWidgetConfig } = useHomeLayout();
   const osCard = useOsCardVisibility();
 
   const [editing, setEditing] = useState(false);
   const [showAddWidget, setShowAddWidget] = useState(false);
+  const [showWakeSheet, setShowWakeSheet] = useState(false);
+  const [configuringId, setConfiguringId] = useState<string | null>(null);
+
+  const configuringWidget = widgets.find((w) => w.id === configuringId) ?? null;
 
   const deviceName = activeDevice?.name?.trim() || 'My PC';
 
@@ -86,7 +92,9 @@ export function DashboardTab({ onNavigate }: DashboardTabProps) {
         onReorder={reorder}
         onRemove={removeWidget}
         onResize={resizeWidget}
+        onConfigure={setConfiguringId}
         onNavigateStream={() => onNavigate('stream')}
+        onPowerOn={() => setShowWakeSheet(true)}
       />
 
       {showAddWidget && (
@@ -94,6 +102,16 @@ export function DashboardTab({ onNavigate }: DashboardTabProps) {
           existingTypes={widgets.map((w) => w.type)}
           onAdd={addWidget}
           onClose={() => setShowAddWidget(false)}
+        />
+      )}
+
+      {showWakeSheet && <WakeOnLanSheet onClose={() => setShowWakeSheet(false)} />}
+
+      {configuringWidget && (
+        <QuickActionsConfigSheet
+          instance={configuringWidget}
+          onChange={(actions) => updateWidgetConfig(configuringWidget.id, { actions })}
+          onClose={() => setConfiguringId(null)}
         />
       )}
     </motion.div>

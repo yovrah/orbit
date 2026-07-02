@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { motion, type PanInfo } from 'framer-motion';
-import { X, Maximize2 } from 'lucide-react';
+import { X, Maximize2, Settings2 } from 'lucide-react';
 import { WidgetRenderer } from './WidgetRenderer';
 import { getWidgetMeta } from './catalog';
 import type { WidgetInstance, WidgetSize } from './types';
@@ -19,13 +19,24 @@ interface HomeGridProps {
   onReorder: (next: WidgetInstance[]) => void;
   onRemove: (id: string) => void;
   onResize: (id: string, size: WidgetSize) => void;
+  onConfigure: (id: string) => void;
   onNavigateStream: () => void;
+  onPowerOn: () => void;
 }
 
 /** iOS-style widget grid: 2 columns, dense auto-flow. In edit mode every cell
  * jiggles and becomes draggable — dragging over a neighbor swaps it into that
  * slot immediately, with framer-motion's `layout` animating the reflow. */
-export function HomeGrid({ widgets, editing, onReorder, onRemove, onResize, onNavigateStream }: HomeGridProps) {
+export function HomeGrid({
+  widgets,
+  editing,
+  onReorder,
+  onRemove,
+  onResize,
+  onConfigure,
+  onNavigateStream,
+  onPowerOn,
+}: HomeGridProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
@@ -113,7 +124,25 @@ export function HomeGrid({ widgets, editing, onReorder, onRemove, onResize, onNa
                 <Maximize2 size={11} strokeWidth={3} />
               </button>
             )}
-            <WidgetRenderer instance={w} editing={editing} onNavigateStream={onNavigateStream} />
+            {editing && meta?.configurable && (
+              <button
+                type="button"
+                className={`widget-config ${canResize ? 'offset' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfigure(w.id);
+                }}
+                aria-label="Configure widget"
+              >
+                <Settings2 size={11} strokeWidth={3} />
+              </button>
+            )}
+            <WidgetRenderer
+              instance={w}
+              editing={editing}
+              onNavigateStream={onNavigateStream}
+              onPowerOn={onPowerOn}
+            />
           </motion.div>
         );
       })}

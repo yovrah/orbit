@@ -84,7 +84,15 @@ export function useHomeLayout() {
     });
   }, []);
 
+  const updateWidgetConfig = useCallback((id: string, config: Record<string, unknown>) => {
+    setWidgets((current) => {
+      const next = current.map((w) => (w.id === id ? { ...w, config: { ...w.config, ...config } } : w));
+      db.settings.put({ key: LAYOUT_KEY, value: JSON.stringify(next) });
+      return next;
+    });
+  }, []);
+
   const resetLayout = useCallback(() => persist(DEFAULT_LAYOUT), [persist]);
 
-  return { widgets, loaded, reorder, addWidget, removeWidget, resizeWidget, resetLayout };
+  return { widgets, loaded, reorder, addWidget, removeWidget, resizeWidget, updateWidgetConfig, resetLayout };
 }

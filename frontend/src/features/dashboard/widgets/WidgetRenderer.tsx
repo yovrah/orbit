@@ -15,12 +15,13 @@ interface WidgetRendererProps {
   instance: WidgetInstance;
   editing: boolean;
   onNavigateStream: () => void;
+  onPowerOn: () => void;
 }
 
 /** Resolves a widget instance to its content and applies the shared card
  * chrome. Content is pointer-inert while the grid is in edit mode so a drag
  * or a remove tap can never accidentally trigger a widget's own action. */
-export function WidgetRenderer({ instance, editing, onNavigateStream }: WidgetRendererProps) {
+export function WidgetRenderer({ instance, editing, onNavigateStream, onPowerOn }: WidgetRendererProps) {
   const isBarePresentation =
     instance.type === 'screenThumbnail' || instance.type === 'macroLauncher' || instance.type === 'appShortcut';
   const extraClass = instance.type === 'pinnedApps' ? 'pinned-apps' : instance.type === 'trackpad' ? 'trackpad' : '';
@@ -31,15 +32,15 @@ export function WidgetRenderer({ instance, editing, onNavigateStream }: WidgetRe
       className={`widget-card ${isBarePresentation ? 'bare' : ''} ${extraClass} ${sizeClass}`}
       style={editing ? { pointerEvents: 'none' } : undefined}
     >
-      {renderContent(instance, onNavigateStream)}
+      {renderContent(instance, onNavigateStream, onPowerOn)}
     </div>
   );
 }
 
-function renderContent(instance: WidgetInstance, onNavigateStream: () => void) {
+function renderContent(instance: WidgetInstance, onNavigateStream: () => void, onPowerOn: () => void) {
   switch (instance.type) {
     case 'quickActions':
-      return <QuickActionsWidget />;
+      return <QuickActionsWidget instance={instance} onPowerOn={onPowerOn} />;
     case 'pinnedApps':
       return <PinnedAppsWidget />;
     case 'volume':

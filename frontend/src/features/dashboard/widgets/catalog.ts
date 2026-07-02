@@ -17,11 +17,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
   {
     type: 'quickActions',
     label: 'Quick Actions',
-    description: 'Lock, sleep, restart, shut down, log off, screenshot',
+    description: 'Customizable one-tap system actions',
     icon: Zap,
     defaultSize: '2x2',
     allowedSizes: ['2x2'],
     singleton: true,
+    configurable: true,
   },
   {
     type: 'pinnedApps',
