@@ -18,6 +18,7 @@ SPECIAL_KEYS_MAP = {
     "enter": Key.enter,
     "tab": Key.tab,
     "esc": Key.esc,
+    "escape": Key.esc,
     "space": Key.space,
     "up": Key.up,
     "down": Key.down,
@@ -39,7 +40,10 @@ SPECIAL_KEYS_MAP = {
     "f9": Key.f9,
     "f10": Key.f10,
     "f11": Key.f11,
-    "f12": Key.f12
+    "f12": Key.f12,
+    "media_play_pause": Key.media_play_pause,
+    "media_next": Key.media_next,
+    "media_previous": Key.media_previous
 }
 
 def move_mouse(dx: float, dy: float, accel: bool = True):
@@ -84,10 +88,6 @@ def handle_keyboard(key: str, key_type: str = "keydown", modifiers: dict = None)
             if is_active and mod_name in MODIFIER_MAP:
                 active_modifiers.append(MODIFIER_MAP[mod_name])
 
-    # Press active modifier keys
-    for mod_key in active_modifiers:
-        keyboard.press(mod_key)
-
     # Determine key target
     target_key = None
     key_lower = key.lower()
@@ -96,22 +96,36 @@ def handle_keyboard(key: str, key_type: str = "keydown", modifiers: dict = None)
     elif len(key) == 1:
         target_key = key
     
+    # Check if strong modifiers (Ctrl, Alt, Win) are active
+    has_strong_modifiers = any(m in active_modifiers for m in [Key.ctrl, Key.alt, Key.cmd])
+
     # Emulate key stroke
     if target_key:
         try:
-            if key_type == "keydown":
-                keyboard.press(target_key)
-            elif key_type == "keyup":
-                keyboard.release(target_key)
-            elif key_type == "press":
-                keyboard.press(target_key)
-                keyboard.release(target_key)
+            if len(target_key) == 1 and not has_strong_modifiers and key_type == "press":
+                if Key.shift in active_modifiers:
+                    keyboard.type(target_key.upper())
+                else:
+                    keyboard.type(target_key)
+            else:
+                # Press active modifier keys
+                for mod_key in active_modifiers:
+                    keyboard.press(mod_key)
+
+                if key_type == "keydown":
+                    keyboard.press(target_key)
+                elif key_type == "keyup":
+                    keyboard.release(target_key)
+                elif key_type == "press":
+                    keyboard.press(target_key)
+                    keyboard.release(target_key)
+
+                # Release modifier keys in reverse order
+                for mod_key in reversed(active_modifiers):
+                    keyboard.release(mod_key)
         except Exception as e:
             print(f"Emulate key failed for {key}: {e}")
 
-    # Release modifier keys in reverse order
-    for mod_key in reversed(active_modifiers):
-        keyboard.release(mod_key)
 
 def move_mouse_absolute(x_ratio: float, y_ratio: float):
     import ctypes
@@ -128,4 +142,36 @@ def move_mouse_absolute(x_ratio: float, y_ratio: float):
     target_y = max(0, min(height - 1, target_y))
     
     mouse.position = (target_x, target_y)
+
+def handle_key_combo(keys: list):
+    pressed_modifiers = []
+    try:
+        for key in keys:
+            key_lower = key.lower()
+            if key_lower in MODIFIER_MAP:
+                mod_key = MODIFIER_MAP[key_lower]
+                keyboard.press(mod_key)
+                pressed_modifiers.append(mod_key)
+            else:
+                target_key = None
+                if key_lower in SPECIAL_KEYS_MAP:
+                    target_key = SPECIAL_KEYS_MAP[key_lower]
+                elif len(key) == 1:
+                    target_key = key
+                
+                if target_key:
+                    try:
+                        keyboard.press(target_key)
+                        keyboard.release(target_key)
+                    except Exception as e:
+                        print(f"Failed to press key {target_key} in combo: {e}")
+    except Exception as e:
+        print(f"Error in key combo emulation: {e}")
+    finally:
+        for mod_key in reversed(pressed_modifiers):
+            try:
+                keyboard.release(mod_key)
+            except:
+                pass
+
 

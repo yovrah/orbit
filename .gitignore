@@ -24,3 +24,17 @@ local_settings.py
 .idea/
 .DS_Store
 Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Tooling scratch
+.omc/
+.playwright-mcp/
+.claude/
+
+# PyInstaller build artifacts (release binaries live in GitHub Releases)
+agent/build/
+agent/dist/
+Orbit-windows.zip

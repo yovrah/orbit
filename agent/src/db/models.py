@@ -42,3 +42,11 @@ def get_paired_client(client_id: str):
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
+def get_all_paired_clients():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM paired_clients")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

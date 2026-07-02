@@ -1,6 +1,7 @@
 @echo off
-title Orbit Remote Agent
-echo Starting Orbit Remote Agent...
+:: Orbit Agent - starts the tray app hidden (no console window stays open).
+:: Look for the Orbit icon in the system tray; the QR window opens automatically.
 cd /d "%~dp0agent"
-venv\Scripts\python.exe src/main.py
-pause
+start "" venv\Scripts\pythonw.exe src\tray.py
+echo Orbit Agent started. Look for the Orbit icon in your system tray.
+timeout /t 4 >nul

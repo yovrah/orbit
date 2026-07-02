@@ -33,6 +33,24 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        // LAN tool: prefer the network so a freshly scanned QR always loads the
+        // latest code. The cache is only a fallback when the PC is unreachable.
+        navigateFallback: null,
+        runtimeCaching: [
+          {
+            urlPattern: ({ sameOrigin, request }) =>
+              sameOrigin &&
+              (request.mode === 'navigate' || ['script', 'style'].includes(request.destination)),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'orbit-app',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 64 },
+            },
+          },
+        ],
       }
     })
   ],

@@ -6,9 +6,14 @@ from comtypes import CLSCTX_ALL
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
 def get_volume_interface():
-    # Helper to resolve the Windows audio endpoint volume interface
-    devices = AudioUtilities.GetSpeakers()
-    interface = devices.Activate(
+    # Helper to resolve the Windows audio endpoint volume interface.
+    # pycaw >= 2024 wraps the device in AudioDevice (EndpointVolume property);
+    # older releases return the raw COM device that must be Activate()d.
+    device = AudioUtilities.GetSpeakers()
+    endpoint = getattr(device, "EndpointVolume", None)
+    if endpoint is not None:
+        return endpoint
+    interface = device.Activate(
         IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
     return cast(interface, POINTER(IAudioEndpointVolume))
 
@@ -73,4 +78,12 @@ def toggle_mute() -> bool:
         return new_mute
     except Exception as e:
         print(f"Error toggling mute: {e}")
+        return False
+
+def get_mute() -> bool:
+    try:
+        volume = get_volume_interface()
+        return bool(volume.GetMute())
+    except Exception as e:
+        print(f"Error reading mute state: {e}")
         return False

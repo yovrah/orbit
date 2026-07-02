@@ -4,13 +4,59 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#f4f6fa" />
     <title>Orbit Remote</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <style>
+      /* Liquid Glass Design System */
+      .material-symbols-outlined {
+        font-family: 'Material Symbols Outlined';
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        direction: ltr;
+        -webkit-font-smoothing: antialiased;
+      }
+      .glass-panel {
+        background-color: rgba(255,255,255,0.72);
+        backdrop-filter: blur(30px) saturate(180%);
+        -webkit-backdrop-filter: blur(30px) saturate(180%);
+        border: 0.5px solid rgba(255,255,255,0.55);
+        box-shadow: 0 40px 40px -10px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8);
+      }
+      .glass-button {
+        background-color: #F2F2F7;
+        transition: all 0.2s cubic-bezier(0.25,1,0.5,1);
+      }
+      .glass-button:active { transform: scale(0.95); background-color: #E5E5EA; }
+      .status-glow { box-shadow: 0 0 8px rgba(52,199,89,0.6); }
+      .dot-grid {
+        background-image: radial-gradient(rgba(113,119,134,0.12) 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+      .specular {
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 2px 10px rgba(0,0,0,0.05);
+      }
+      .nav-glow { box-shadow: 0 0 15px rgba(0,112,235,0.4); }
+      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      ::-webkit-scrollbar { display: none; }
+      * { -webkit-tap-highlight-color: transparent; }
+    </style>
   </head>
-  <body class="bg-gradient-to-tr from-[var(--bg-gradient-start)] to-[var(--bg-gradient-end)] min-h-screen text-[var(--text-primary)] font-['Outfit',sans-serif] select-none overflow-x-hidden antialiased">
+  <body class="min-h-screen select-none overflow-x-hidden antialiased" style="font-family: 'Inter', 'Outfit', sans-serif; background-color: #f4f6fa; background-image: radial-gradient(circle at 15% 50%, rgba(216,226,255,0.4), transparent 50%), radial-gradient(circle at 85% 30%, rgba(223,223,228,0.5), transparent 50%); background-attachment: fixed;">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

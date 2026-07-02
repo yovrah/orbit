@@ -1,0 +1,42 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Orbit logo">
+  <defs>
+    <linearGradient id="orbitBg" x1="64" y1="40" x2="448" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3A9BFF"/>
+      <stop offset="0.55" stop-color="#0A74F0"/>
+      <stop offset="1" stop-color="#0A50CC"/>
+    </linearGradient>
+    <radialGradient id="orbitSheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(150 130) rotate(54) scale(360)">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.40"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orbitCore" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(244 244) scale(58)">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D6E8FF"/>
+    </radialGradient>
+    <radialGradient id="orbitMoon" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(388 180) scale(34)">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#BFDcFF"/>
+    </radialGradient>
+    <filter id="orbitGlow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Squircle backdrop -->
+  <rect x="0" y="0" width="512" height="512" rx="118" fill="url(#orbitBg)"/>
+  <rect x="0" y="0" width="512" height="512" rx="118" fill="url(#orbitSheen)"/>
+
+  <!-- Orbit ring (tilted) -->
+  <g transform="rotate(-26 256 256)">
+    <ellipse cx="256" cy="256" rx="158" ry="76" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="14"/>
+  </g>
+
+  <!-- Core planet -->
+  <circle cx="256" cy="256" r="44" fill="url(#orbitCore)"/>
+
+  <!-- Orbiting satellite -->
+  <g transform="rotate(-26 256 256)">
+    <circle cx="414" cy="256" r="27" fill="url(#orbitMoon)" filter="url(#orbitGlow)"/>
+  </g>
+</svg>

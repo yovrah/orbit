@@ -1,0 +1,11 @@
+import type { CSSProperties } from 'react';
+
+interface SkeletonProps {
+  className?: string;
+  style?: CSSProperties;
+}
+
+/** A shimmering placeholder block shown while real content is loading. */
+export function Skeleton({ className = '', style }: SkeletonProps) {
+  return <div className={`skeleton ${className}`} style={style} aria-hidden="true" />;
+}

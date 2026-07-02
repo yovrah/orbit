@@ -1,224 +1,248 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  CheckCircle,
+  Laptop,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  X,
+} from 'lucide-react';
 import { useDiscovery, type DiscoveredDevice } from '../hooks/useDiscovery';
 import { db } from '../db/clientDb';
-import { 
-  Plus, 
-  Search, 
-  RefreshCw, 
-  ShieldAlert, 
-  Laptop,
-  CheckCircle,
-  X
-} from 'lucide-react';
+
+function generateUUID(): string {
+  if (typeof window !== 'undefined' && window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 interface PairingFlowProps {
   onClose: () => void;
   onSuccess: () => void;
+  /** Called with the newly paired device UUID so the host can make it active. */
+  onPaired?: (uuid: string) => void;
 }
 
-export default function PairingFlow({ onClose, onSuccess }: PairingFlowProps) {
+export default function PairingFlow({ onClose, onSuccess, onPaired }: PairingFlowProps) {
   const { isScanning, discoveredDevices, scanSubnet } = useDiscovery();
   const [manualIp, setManualIp] = useState('');
   const [pin, setPin] = useState('');
   const [pairingDevice, setPairingDevice] = useState<DiscoveredDevice | null>(null);
   const [sessionToken, setSessionToken] = useState('');
+  const [clientUuid, setClientUuid] = useState('');
   const [step, setStep] = useState<'select' | 'pin' | 'success' | 'error'>('select');
   const [errorMessage, setErrorMessage] = useState('');
 
   const getBaseUrl = (ipOrUrl: string) => {
     const trimmed = ipOrUrl.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
-    }
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
     return `http://${trimmed}:23810`;
-  };
-
-  const handleManualAdd = async () => {
-    if (!manualIp) return;
-    try {
-      setErrorMessage('');
-      const targetUrl = getBaseUrl(manualIp);
-      const res = await fetch(`${targetUrl}/api/v1/ping`);
-      const data = await res.json();
-      if (data.status === 'online') {
-        initiatePairing({
-          ip: targetUrl,
-          port: 23810,
-          name: data.agent_name,
-          os: data.os,
-          version: data.version,
-          paired: data.paired
-        });
-      } else {
-        throw new Error('Устройство не в сети');
-      }
-    } catch (err: any) {
-      setStep('error');
-      setErrorMessage('Не удалось подключиться к указанному хосту. Убедитесь, что Orbit Agent запущен.');
-    }
   };
 
   const initiatePairing = async (device: DiscoveredDevice) => {
     setPairingDevice(device);
     try {
       setErrorMessage('');
-      const clientUuid = window.crypto.randomUUID();
-      const mockPublicKey = "ECDSA_PUB_KEY_" + clientUuid;
-
+      const newClientUuid = generateUUID();
+      setClientUuid(newClientUuid);
       const targetUrl = getBaseUrl(device.ip);
-      const res = await fetch(`${targetUrl}/api/v1/pair/initiate`, {
+      const response = await fetch(`${targetUrl}/api/v1/pair/initiate`, {
         method: 'POST',
+        mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          client_id: clientUuid,
-          client_name: 'PWA Web Controller',
-          client_public_key: mockPublicKey
-        })
+          client_id: newClientUuid,
+          client_name: 'Orbit PWA',
+          client_public_key: `ECDSA_PUB_KEY_${newClientUuid}`,
+        }),
       });
 
-      if (!res.ok) throw new Error('Сбой инициализации сопряжения');
+      if (!response.ok) throw new Error('Failed to initiate pairing.');
 
-      const data = await res.json();
+      const data = await response.json();
       if (data.status === 'pending_pin') {
         setSessionToken(data.pairing_session_token);
         setStep('pin');
       }
-    } catch (err: any) {
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to connect to Orbit Agent.');
       setStep('error');
-      setErrorMessage(err.message || 'Ошибка подключения к агенту.');
+    }
+  };
+
+  const handleManualAdd = async () => {
+    if (!manualIp.trim()) return;
+    try {
+      setErrorMessage('');
+      const targetUrl = getBaseUrl(manualIp);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const response = await fetch(`${targetUrl}/api/v1/ping`, {
+        mode: 'cors',
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const data = await response.json();
+      if (data.status !== 'online') throw new Error('Device is offline.');
+
+      initiatePairing({
+        ip: targetUrl,
+        port: 23810,
+        name: data.agent_name,
+        os: data.os,
+        version: data.version,
+        paired: data.paired,
+      });
+    } catch {
+      setErrorMessage('Failed to connect to host. Make sure Orbit Agent is running on the PC.');
+      setStep('error');
     }
   };
 
   const verifyPin = async () => {
-    if (!pairingDevice || !pin) return;
+    if (!pairingDevice || !pin.trim()) return;
     try {
       setErrorMessage('');
       const targetUrl = getBaseUrl(pairingDevice.ip);
-      const res = await fetch(`${targetUrl}/api/v1/pair/verify`, {
+      const response = await fetch(`${targetUrl}/api/v1/pair/verify`, {
         method: 'POST',
+        mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pairing_session_token: sessionToken,
-          pin: pin
-        })
+          pin,
+        }),
       });
 
-      if (!res.ok) {
-        throw new Error('Неверный PIN-код сопряжения');
-      }
+      if (!response.ok) throw new Error('Invalid pairing PIN code.');
 
-      const data = await res.json();
+      const data = await response.json();
       if (data.status === 'paired') {
-        // Save to client Dexie db
         await db.devices.add({
-          uuid: sessionToken,
+          uuid: clientUuid,
           name: pairingDevice.name,
           ipAddress: targetUrl,
           port: pairingDevice.port,
-          macAddress: '00:00:00:00:00:00',
+          macAddress: data.mac_address || '00:00:00:00:00:00',
           osName: pairingDevice.os,
           osVersion: pairingDevice.version,
           sharedSecret: data.encrypted_shared_secret,
           isPaired: true,
-          lastConnected: new Date()
+          lastConnected: new Date(),
         });
+
+        // Make the newly paired device the active one immediately.
+        onPaired?.(clientUuid);
 
         setStep('success');
       }
-    } catch (err: any) {
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Error verifying PIN code.');
       setStep('error');
-      setErrorMessage(err.message || 'Ошибка проверки PIN-кода.');
     }
   };
 
+  const title = {
+    select: 'Add PC',
+    pin: 'Enter PIN',
+    success: 'Paired',
+    error: 'Pairing Error',
+  }[step];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
-      <motion.div 
-        className="w-full max-w-[390px] rounded-[32px] glass-card p-6 flex flex-col justify-between overflow-hidden relative"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4 backdrop-blur-xl">
+      <motion.div
+        className="glass-card w-full max-w-[390px] overflow-hidden rounded-[32px] p-5"
+        initial={{ opacity: 0, scale: 0.94, y: 18 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: 18 }}
       >
-        
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">
-            {step === 'select' && 'Добавить PC'}
-            {step === 'pin' && 'Введите PIN'}
-            {step === 'success' && 'Успешно'}
-            {step === 'error' && 'Ошибка'}
-          </h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-[#86868b]">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-[22px] font-black leading-tight text-[#17181c]">{title}</h2>
+            <p className="text-xs font-bold text-[#7b8491]">Connect Orbit to your computer</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-10 w-10 place-items-center rounded-full bg-white/70 text-[#6e7682] shadow-sm"
+            aria-label="Close"
+          >
             <X size={18} />
           </button>
         </div>
 
         <AnimatePresence mode="wait">
           {step === 'select' && (
-            <motion.div 
+            <motion.div
               key="select"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
               className="flex flex-col gap-4"
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12 }}
             >
-              {/* Manual IP Input */}
               <div className="flex gap-2">
-                <input 
-                  type="text" 
+                <input
                   value={manualIp}
-                  onChange={(e) => setManualIp(e.target.value)}
-                  placeholder="Введите IP (например: 192.168.1.100)" 
-                  className="flex-1 px-4 py-3 rounded-xl bg-black/5 dark:bg-white/5 border border-transparent dark:border-white/5 text-sm focus:outline-none focus:border-apple-blue text-[var(--text-primary)]"
+                  onChange={(event) => setManualIp(event.target.value)}
+                  placeholder="192.168.1.100"
+                  className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm font-bold text-[#17181c] outline-none placeholder:text-[#9aa3b0] focus:border-[#007aff]"
                 />
-                <button 
+                <button
+                  type="button"
                   onClick={handleManualAdd}
-                  className="p-3 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:opacity-90 flex items-center justify-center"
+                  className="grid h-12 w-12 place-items-center rounded-2xl bg-[#007aff] text-white shadow-lg shadow-blue-500/20"
+                  aria-label="Add manually"
                 >
-                  <Plus size={18} />
+                  <Plus size={19} />
                 </button>
               </div>
 
-              {/* Discovery sweep bar */}
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-xs font-semibold text-[#86868b]">Устройства в локальной сети</span>
-                <button 
-                  onClick={() => scanSubnet()} 
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase text-[#7b8491]">Local Network</span>
+                <button
+                  type="button"
+                  onClick={() => scanSubnet()}
                   disabled={isScanning}
-                  className={`p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-apple-blue ${isScanning ? 'animate-spin' : ''}`}
+                  className="grid h-9 w-9 place-items-center rounded-full bg-white/70 text-[#007aff]"
+                  aria-label="Scan network"
                 >
-                  <RefreshCw size={15} />
+                  <RefreshCw size={16} className={isScanning ? 'spin' : ''} />
                 </button>
               </div>
 
-              {/* Scanned Devices List */}
-              <div className="max-h-[200px] overflow-y-auto flex flex-col gap-2">
+              <div className="max-h-[230px] overflow-y-auto rounded-[24px] bg-white/45 p-2">
                 {discoveredDevices.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-[#86868b] border border-dashed border-black/10 dark:border-white/10 rounded-2xl flex flex-col items-center gap-2">
-                    <Search size={22} className="opacity-50" />
-                    <span>Нажмите обновить для сканирования сети</span>
+                  <div className="grid min-h-[150px] place-items-center content-center gap-2 text-center text-xs font-bold text-[#8b94a1]">
+                    <Search size={24} />
+                    <span>Start scanning or enter IP address manually.</span>
                   </div>
                 ) : (
-                  discoveredDevices.map((dev, idx) => (
-                    <div 
-                      key={idx}
-                      onClick={() => initiatePairing(dev)}
-                      className="p-3 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-between cursor-pointer border border-transparent hover:border-black/5 transition-all"
+                  discoveredDevices.map((device) => (
+                    <button
+                      key={`${device.ip}-${device.name}`}
+                      type="button"
+                      onClick={() => initiatePairing(device)}
+                      className="flex w-full items-center gap-3 rounded-[20px] p-3 text-left transition hover:bg-white/60"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-apple-blue/10 text-apple-blue flex items-center justify-center">
-                          <Laptop size={18} />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-[var(--text-primary)]">{dev.name}</h4>
-                          <span className="text-[10px] text-[#86868b]">{dev.ip}</span>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-semibold text-apple-blue bg-apple-blue/10 px-2 py-1 rounded-full">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#007aff] text-white">
+                        <Laptop size={19} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-sm font-black text-[#17181c]">{device.name}</strong>
+                        <small className="block truncate text-xs font-bold text-[#7b8491]">{device.ip}</small>
+                      </span>
+                      <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-[#007aff]">
                         Pair
                       </span>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -226,77 +250,51 @@ export default function PairingFlow({ onClose, onSuccess }: PairingFlowProps) {
           )}
 
           {step === 'pin' && (
-            <motion.div 
-              key="pin"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              className="text-center flex flex-col items-center gap-4 py-4"
-            >
-              <p className="text-xs text-[#86868b] max-w-[240px]">
-                Введите 6-значный код сопряжения, отображаемый на экране компьютера <strong>{pairingDevice?.name}</strong>
+            <motion.div key="pin" className="grid gap-5 py-3 text-center" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }}>
+              <p className="mx-auto max-w-[270px] text-sm font-bold text-[#7b8491]">
+                Enter the 6-digit pairing code displayed on the computer screen ({pairingDevice?.name || 'your PC'}).
               </p>
-              
-              <input 
-                type="text" 
-                maxLength={6}
+              <input
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                maxLength={6}
+                inputMode="numeric"
+                onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))}
                 placeholder="000000"
-                className="text-center text-3xl font-bold tracking-[8px] w-48 py-2 border-b-2 border-apple-blue bg-transparent text-[var(--text-primary)] focus:outline-none"
+                className="mx-auto w-52 border-0 border-b-2 border-[#007aff] bg-transparent py-2 text-center text-3xl font-black tracking-[8px] text-[#17181c] outline-none"
               />
-
-              <button 
-                onClick={verifyPin}
-                className="w-full mt-4 py-3 rounded-xl bg-black dark:bg-white text-white dark:text-black font-semibold text-sm hover:opacity-90"
-              >
-                Подтвердить
+              <button type="button" onClick={verifyPin} className="rounded-2xl bg-[#007aff] py-3 text-sm font-black text-white shadow-lg shadow-blue-500/20">
+                Confirm
               </button>
             </motion.div>
           )}
 
           {step === 'success' && (
-            <motion.div 
-              key="success"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="text-center py-6 flex flex-col items-center gap-3"
-            >
-              <CheckCircle size={48} className="text-[#34c759] shadow-sm" />
-              <p className="text-sm font-bold text-[var(--text-primary)]">Устройство успешно подключено!</p>
-              <button 
+            <motion.div key="success" className="grid place-items-center gap-4 py-8 text-center" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}>
+              <CheckCircle size={52} className="text-[#34c759]" />
+              <p className="text-sm font-black text-[#17181c]">Computer paired successfully and ready to control.</p>
+              <button
+                type="button"
                 onClick={() => {
                   onSuccess();
                   onClose();
                 }}
-                className="mt-4 px-6 py-2.5 rounded-xl bg-black dark:bg-white text-white dark:text-black font-semibold text-xs"
+                className="rounded-2xl bg-[#17181c] px-7 py-3 text-sm font-black text-white"
               >
-                Готово
+                Done
               </button>
             </motion.div>
           )}
 
           {step === 'error' && (
-            <motion.div 
-              key="error"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="text-center py-4 flex flex-col items-center gap-3"
-            >
-              <ShieldAlert size={40} className="text-apple-red" />
-              <p className="text-xs text-[#ff3b30] max-w-[250px] font-medium leading-relaxed">{errorMessage}</p>
-              <button 
-                onClick={() => setStep('select')}
-                className="mt-4 px-6 py-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-primary)] font-semibold text-xs hover:bg-black/10"
-              >
-                Назад
+            <motion.div key="error" className="grid place-items-center gap-4 py-6 text-center" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}>
+              <ShieldAlert size={46} className="text-[#ff3b30]" />
+              <p className="max-w-[280px] text-sm font-bold text-[#c22b22]">{errorMessage}</p>
+              <button type="button" onClick={() => setStep('select')} className="rounded-2xl bg-white/70 px-7 py-3 text-sm font-black text-[#17181c]">
+                Back
               </button>
             </motion.div>
           )}
         </AnimatePresence>
-
       </motion.div>
     </div>
   );

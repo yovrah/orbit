@@ -1,30 +1,67 @@
 import { useEffect, useRef } from 'react';
+import { haptic } from '../lib/haptics';
 
-interface UseTouchpadProps {
-  elementRef: React.RefObject<HTMLDivElement | null>;
-  sendEvent: (payload: any) => void;
-  enabled: boolean;
+interface TouchPoint {
+  x: number;
+  y: number;
 }
 
-export function useTouchpad({ elementRef, sendEvent, enabled }: UseTouchpadProps) {
+interface UseTouchpadProps {
+  element: HTMLDivElement | null;
+  sendEvent: (payload: any) => void;
+  enabled: boolean;
+  sensitivity?: number;
+  scrollSensitivity?: number;
+  /** Reports the active finger position (element-relative) for a live cursor, null on release. */
+  onPoint?: (point: TouchPoint | null) => void;
+}
+
+export function useTouchpad({
+  element,
+  sendEvent,
+  enabled,
+  sensitivity = 1.0,
+  scrollSensitivity = 1.0,
+  onPoint,
+}: UseTouchpadProps) {
+  // Kept in a ref so a changing callback identity never re-binds the listeners.
+  const onPointRef = useRef(onPoint);
+  onPointRef.current = onPoint;
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
   const lastTapTimeRef = useRef<number>(0);
   const isScrollingRef = useRef(false);
+  const maxTouchesRef = useRef<number>(0);
+  const isDraggingRef = useRef<boolean>(false);
+  const dragCandidateRef = useRef<boolean>(false);
 
   useEffect(() => {
-    const el = elementRef.current;
+    const el = element;
     if (!el || !enabled) return;
 
     const handleTouchStart = (e: TouchEvent) => {
       if (e.cancelable) e.preventDefault();
 
       const touches = e.touches;
+      maxTouchesRef.current = Math.max(maxTouchesRef.current, touches.length);
+
       if (touches.length === 1) {
         const touch = touches[0];
-        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+        const now = Date.now();
+        const timeSinceLastTap = now - lastTapTimeRef.current;
+
+        if (timeSinceLastTap < 300) {
+          dragCandidateRef.current = true;
+        } else {
+          dragCandidateRef.current = false;
+        }
+
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: now };
         lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
         isScrollingRef.current = false;
+
+        const rect = el.getBoundingClientRect();
+        onPointRef.current?.({ x: touch.clientX - rect.left, y: touch.clientY - rect.top });
       } else if (touches.length === 2) {
         isScrollingRef.current = true;
         const t1 = touches[0];
@@ -43,18 +80,30 @@ export function useTouchpad({ elementRef, sendEvent, enabled }: UseTouchpadProps
       if (touches.length === 1 && !isScrollingRef.current) {
         const touch = touches[0];
         if (lastTouchRef.current) {
-          const dx = touch.clientX - lastTouchRef.current.x;
-          const dy = touch.clientY - lastTouchRef.current.y;
+          const dx = (touch.clientX - lastTouchRef.current.x) * sensitivity;
+          const dy = (touch.clientY - lastTouchRef.current.y) * sensitivity;
 
-          // Dispatch relative mouse delta
+          if (dragCandidateRef.current) {
+            sendEvent({
+              event: 'mouse_click',
+              button: 'left',
+              type: 'down',
+            });
+            isDraggingRef.current = true;
+            dragCandidateRef.current = false;
+          }
+
           sendEvent({
             event: 'mouse_move',
             dx,
             dy,
-            accel: true
+            accel: true,
           });
         }
         lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+
+        const rect = el.getBoundingClientRect();
+        onPointRef.current?.({ x: touch.clientX - rect.left, y: touch.clientY - rect.top });
       } else if (touches.length === 2 && isScrollingRef.current) {
         const t1 = touches[0];
         const t2 = touches[1];
@@ -62,14 +111,13 @@ export function useTouchpad({ elementRef, sendEvent, enabled }: UseTouchpadProps
         const currentMidX = (t1.clientX + t2.clientX) / 2;
 
         if (lastTouchRef.current) {
-          // Adjust scroll speed multiplier
-          const dy = (currentMidY - lastTouchRef.current.y) / 4.0;
-          const dx = (currentMidX - lastTouchRef.current.x) / 4.0;
+          const dy = ((currentMidY - lastTouchRef.current.y) / 4.0) * scrollSensitivity;
+          const dx = ((currentMidX - lastTouchRef.current.x) / 4.0) * scrollSensitivity;
 
           sendEvent({
             event: 'mouse_scroll',
             dx,
-            dy
+            dy,
           });
         }
         lastTouchRef.current = { x: currentMidX, y: currentMidY };
@@ -79,38 +127,47 @@ export function useTouchpad({ elementRef, sendEvent, enabled }: UseTouchpadProps
     const handleTouchEnd = (e: TouchEvent) => {
       if (e.cancelable) e.preventDefault();
 
-      const touches = e.changedTouches;
       const start = touchStartRef.current;
-
-      if (start && touches.length === 1 && !isScrollingRef.current) {
-        const touch = touches[0];
-        const duration = Date.now() - start.time;
-        const dist = Math.sqrt(
+      const duration = start ? Date.now() - start.time : 0;
+      let dist = 0;
+      if (start && e.changedTouches.length > 0) {
+        const touch = e.changedTouches[0];
+        dist = Math.sqrt(
           Math.pow(touch.clientX - start.x, 2) + Math.pow(touch.clientY - start.y, 2)
         );
-
-        // Define Tap gesture limits
-        if (duration < 250 && dist < 10) {
-          const now = Date.now();
-          const timeSinceLastTap = now - lastTapTimeRef.current;
-
-          if (timeSinceLastTap < 300) {
-            // Double Tap -> Double Left Click
-            sendEvent({ event: 'mouse_click', button: 'left', type: 'double' });
-            lastTapTimeRef.current = 0;
-          } else {
-            // Single Tap -> Left Click
-            sendEvent({ event: 'mouse_click', button: 'left', type: 'click' });
-            lastTapTimeRef.current = now;
-          }
-        }
-      } else if (isScrollingRef.current && e.touches.length === 0) {
-        isScrollingRef.current = false;
       }
 
-      // Check for Two-Finger Tap (Right Click)
-      if (e.touches.length === 0 && e.changedTouches.length === 2) {
-        sendEvent({ event: 'mouse_click', button: 'right', type: 'click' });
+      if (e.touches.length === 0) {
+        if (maxTouchesRef.current === 1) {
+          if (isDraggingRef.current) {
+            sendEvent({ event: 'mouse_click', button: 'left', type: 'up' });
+            isDraggingRef.current = false;
+          } else if (dragCandidateRef.current) {
+            sendEvent({ event: 'mouse_click', button: 'left', type: 'double' });
+            dragCandidateRef.current = false;
+            lastTapTimeRef.current = 0;
+            haptic(12);
+          } else if (duration < 250 && dist < 10) {
+            sendEvent({ event: 'mouse_click', button: 'left', type: 'click' });
+            lastTapTimeRef.current = Date.now();
+            haptic(10);
+          }
+        } else if (maxTouchesRef.current === 2) {
+          if (duration < 250 && dist < 15) {
+            sendEvent({ event: 'mouse_click', button: 'right', type: 'click' });
+            haptic(10);
+          }
+        } else if (maxTouchesRef.current === 3) {
+          if (duration < 250 && dist < 15) {
+            sendEvent({ event: 'mouse_click', button: 'middle', type: 'click' });
+            haptic(10);
+          }
+        }
+
+        maxTouchesRef.current = 0;
+        isScrollingRef.current = false;
+        dragCandidateRef.current = false;
+        onPointRef.current?.(null);
       }
 
       touchStartRef.current = null;
@@ -126,5 +183,5 @@ export function useTouchpad({ elementRef, sendEvent, enabled }: UseTouchpadProps
       el.removeEventListener('touchmove', handleTouchMove);
       el.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [elementRef, sendEvent, enabled]);
+  }, [element, sendEvent, enabled, sensitivity, scrollSensitivity]);
 }

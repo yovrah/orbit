@@ -2,7 +2,7 @@
 name = "orbit-agent"
 version = "1.0.0"
 description = "Orbit Windows Remote Control Agent"
-authors = ["DeepMind Team"]
+authors = ["yovrah"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
