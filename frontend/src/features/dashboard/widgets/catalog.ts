@@ -35,19 +35,19 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
   {
     type: 'volume',
     label: 'Volume',
-    description: 'Tall Control-Center-style volume slider',
+    description: 'Narrow Control-Center-style volume slider',
     icon: Volume2,
-    defaultSize: '1x2',
-    allowedSizes: ['1x2'],
+    defaultSize: 'slim',
+    allowedSizes: ['slim', '1x1'],
     singleton: true,
   },
   {
     type: 'brightness',
     label: 'Brightness',
-    description: 'Tall Control-Center-style brightness slider',
+    description: 'Narrow Control-Center-style brightness slider',
     icon: Sun,
-    defaultSize: '1x2',
-    allowedSizes: ['1x2'],
+    defaultSize: 'slim',
+    allowedSizes: ['slim', '1x1'],
     singleton: true,
   },
   {
@@ -74,7 +74,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'A small live preview of your PC screen',
     icon: MonitorPlay,
     defaultSize: '2x2',
-    allowedSizes: ['2x2'],
+    allowedSizes: ['1x2', '2x2'],
     singleton: true,
   },
   {
@@ -92,7 +92,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Mini touchpad — move, tap to click, two-finger scroll',
     icon: Mouse,
     defaultSize: '2x2',
-    allowedSizes: ['2x2'],
+    allowedSizes: ['1x2', '2x2'],
     singleton: true,
   },
   {
@@ -119,10 +119,12 @@ export function getWidgetMeta(type: WidgetInstance['type']): WidgetMeta | undefi
   return WIDGET_CATALOG.find((w) => w.type === type);
 }
 
-/** First-run layout — mirrors what the Dashboard looked like before it became customizable. */
+/** First-run layout: Quick Actions, pinned apps, then the two narrow sliders
+ * with a half-tall trackpad filling the row beside them (packs cleanly, no gaps). */
 export const DEFAULT_LAYOUT: WidgetInstance[] = [
   { id: 'default-quick-actions', type: 'quickActions', size: '2x2' },
   { id: 'default-pinned-apps', type: 'pinnedApps', size: '2x1' },
-  { id: 'default-volume', type: 'volume', size: '1x2' },
-  { id: 'default-brightness', type: 'brightness', size: '1x2' },
+  { id: 'default-volume', type: 'volume', size: 'slim' },
+  { id: 'default-brightness', type: 'brightness', size: 'slim' },
+  { id: 'default-trackpad', type: 'trackpad', size: '1x2' },
 ];

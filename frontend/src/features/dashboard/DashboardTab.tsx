@@ -43,6 +43,16 @@ export function DashboardTab({ onNavigate }: DashboardTabProps) {
         title={deviceName}
         action={
           <div className="flex items-center gap-2">
+            {editing && (
+              <button
+                type="button"
+                className="h-act"
+                onClick={() => setShowAddWidget(true)}
+                aria-label="Add widget"
+              >
+                <Plus size={20} />
+              </button>
+            )}
             <button
               type="button"
               className={`h-act ${editing ? 'on' : ''}`}
@@ -78,13 +88,6 @@ export function DashboardTab({ onNavigate }: DashboardTabProps) {
         onResize={resizeWidget}
         onNavigateStream={() => onNavigate('stream')}
       />
-
-      {editing && (
-        <button type="button" className="widget-add-tile" onClick={() => setShowAddWidget(true)}>
-          <Plus size={20} />
-          <span>Add Widget</span>
-        </button>
-      )}
 
       {showAddWidget && (
         <AddWidgetSheet

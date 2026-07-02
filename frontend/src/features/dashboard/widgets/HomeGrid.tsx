@@ -6,10 +6,11 @@ import { getWidgetMeta } from './catalog';
 import type { WidgetInstance, WidgetSize } from './types';
 
 const SIZE_SPAN: Record<WidgetSize, { col: number; row: number }> = {
-  '1x1': { col: 1, row: 1 },
-  '1x2': { col: 1, row: 2 },
-  '2x1': { col: 2, row: 1 },
-  '2x2': { col: 2, row: 2 },
+  slim: { col: 1, row: 2 },
+  '1x1': { col: 2, row: 1 },
+  '1x2': { col: 2, row: 2 },
+  '2x1': { col: 4, row: 1 },
+  '2x2': { col: 4, row: 2 },
 };
 
 interface HomeGridProps {

@@ -24,10 +24,11 @@ export function WidgetRenderer({ instance, editing, onNavigateStream }: WidgetRe
   const isBarePresentation =
     instance.type === 'screenThumbnail' || instance.type === 'macroLauncher' || instance.type === 'appShortcut';
   const extraClass = instance.type === 'pinnedApps' ? 'pinned-apps' : instance.type === 'trackpad' ? 'trackpad' : '';
+  const sizeClass = instance.size === 'slim' ? 'slim' : '';
 
   return (
     <div
-      className={`widget-card ${isBarePresentation ? 'bare' : ''} ${extraClass}`}
+      className={`widget-card ${isBarePresentation ? 'bare' : ''} ${extraClass} ${sizeClass}`}
       style={editing ? { pointerEvents: 'none' } : undefined}
     >
       {renderContent(instance, onNavigateStream)}

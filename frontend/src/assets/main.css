@@ -2124,9 +2124,11 @@ input {
 }
 
 /* ---- Home widget grid ---- */
+/* 4 columns so a quarter-width "slim" slider (iOS Control-Center) fits next to
+   half- and full-width tiles. A visual square spans 2 of the 4 columns. */
 .widget-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   grid-auto-rows: 108px;
   grid-auto-flow: row dense;
   gap: 12px;
@@ -2324,6 +2326,20 @@ input {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Slim (quarter-width) tiles drop the % text and just show the icon + tall pill,
+   exactly like the iPhone Control Center sliders. */
+.widget-card.slim {
+  padding: 10px;
+}
+
+.widget-card.slim .w-vslider-head {
+  justify-content: center;
+}
+
+.widget-card.slim .w-mini-val {
+  display: none;
 }
 
 .w-vslider-head {
