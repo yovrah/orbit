@@ -22,6 +22,11 @@ hiddenimports = []
 for pkg in ('uvicorn', 'zeroconf', 'comtypes'):
     hiddenimports += collect_submodules(pkg)
 hiddenimports += ['win32timezone', 'wsproto']
+# python-multipart backs FastAPI's UploadFile/Form parsing (used by
+# /api/v1/files/upload). It was missing from an earlier build entirely — add it
+# explicitly, not just via requirements.txt, so a future dependency change
+# can't silently drop it and break every route registration at startup again.
+hiddenimports += collect_submodules('multipart')
 
 # soundcard ships platform backend modules + relies on cffi; grab everything.
 sc_datas, sc_binaries, sc_hidden = collect_all('soundcard')

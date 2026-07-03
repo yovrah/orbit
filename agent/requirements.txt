@@ -1,4 +1,5 @@
 fastapi>=0.110
+python-multipart>=0.0.9
 uvicorn[standard]>=0.28
 pynput>=1.7.6
 zeroconf>=0.131

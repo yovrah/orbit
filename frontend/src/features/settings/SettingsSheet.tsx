@@ -267,7 +267,7 @@ export function SettingsSheet({ onClose, onOpenPairing, onOpenTool }: SettingsSh
             <div className="set-row">
               <span className="r-ico"><Info size={17} /></span>
               <span className="r-name">About Orbit</span>
-              <span className="r-val">v1.0.0</span>
+              <span className="r-val">v1.0.1</span>
             </div>
             <button
               type="button"

@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
 
         print_qr_code(pair_url, local_url, hostname_url)
 
-        desc = {'os': 'Windows', 'version': '1.0.0', 'path': '/api/v1'}
+        desc = {'os': 'Windows', 'version': '1.0.1', 'path': '/api/v1'}
         info = ServiceInfo(
             "_orbit-control._tcp.local.",
             f"{hostname}._orbit-control._tcp.local.",
@@ -113,7 +113,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Error closing mDNS: {e}")
 
-app = FastAPI(title="Orbit Remote Agent", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Orbit Remote Agent", version="1.0.1", lifespan=lifespan)
 
 # The PWA is served by this same agent, so every request the app makes is
 # same-origin and needs no CORS grant. The previous wildcard LAN/`.local`
@@ -323,7 +323,7 @@ def ping():
         "status": "online",
         "agent_name": platform.node() or "My PC",
         "os": f"{platform.system()} {platform.release()}",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "paired": False,
         "mac_address": get_mac_address()
     }
